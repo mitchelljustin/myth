@@ -1,0 +1,159 @@
+Library = { Item* }
+
+Item = { FuncDef }
+
+FuncDef = {
+  "fn" ~ identifier ~ ParamList ~ Type ~ Block
+}
+
+Block = {
+  "{" ~ StatementList ~ "}"
+}
+
+StatementList = {
+  (Statement ~ ";")* ~ Statement ~ ";"?
+}
+
+Statement = {
+  Assignment |
+  BreakStmt |
+  ContinueStmt |
+  ReturnStmt |
+  Expression
+}
+
+BreakStmt = { "break" }
+ContinueStmt = { "continue" }
+ReturnStmt = { "return" ~ Expression? }
+
+Assignment = {
+  "let" ~ LValue ~ "=" ~ Expression
+}
+
+LValue = {
+  identifier
+}
+
+Expression = {
+  OrExpr
+}
+
+OrExpr = {
+  AndExpr ~ ("or" ~ AndExpr)*
+}
+
+AndExpr = {
+  ComparisonExpr ~ ("and" ~ ComparisonExpr)*
+}
+
+ComparisonExpr = {
+  TermExpr ~ (ComparisonOperator ~ TermExpr)*
+}
+
+ComparisonOperator = {
+  EqEq | NotEq | LessThan | GreaterThan | LessThanEq | GreaterThanEq
+}
+
+TermExpr = {
+  FactorExpr ~ (TermOperator ~ FactorExpr)*
+}
+
+TermOperator = {
+  Plus | Minus
+}
+
+FactorExpr = {
+  LeafExpr ~ (FactorOperator ~ LeafExpr)*
+}
+
+FactorOperator = {
+  Asterisk | Slash | Percent
+}
+
+CallExpr = {
+  LeafExpr ~ ArgumentList*
+}
+
+ArgumentList = {
+  ("(" ~ ")") |
+  ("(" ~ Expression ~ ("," ~ Expression)* ~ ")")
+}
+
+LeafExpr = {
+  LiteralExpr |
+  GroupedExpr |
+  PathExpr
+}
+
+LiteralExpr = {
+  StringLiteral |
+  IntegerLiteral |
+  FloatLiteral |
+  BooleanLiteral
+}
+
+StringLiteral = @{
+  "\"" ~ (!"\"" ~ ANY)* ~ "\""
+}
+
+IntegerLiteral = @{
+  Minus? ~ ASCII_DIGIT+
+}
+
+FloatLiteral = @{
+  ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT*
+}
+
+BooleanLiteral = {
+  True | False
+}
+
+GroupedExpr = { "(" ~ Expression ~ ")" }
+
+PathExpr = {
+  identifier ~ ("::" ~ identifier)*
+}
+
+ParamList = {
+  ("(" ~ ")") |
+  ("(" ~ ParamDecl ~ ")")
+}
+
+ParamDecl = {
+  identifier ~ Type
+}
+
+Type = {
+  TypePath
+}
+
+TypePath = {
+  identifier ~ ("::" ~ identifier)*
+}
+
+
+EqEq = { "==" }
+NotEq = { "!=" }
+LessThan = { "<" }
+GreaterThan = { ">" }
+LessThanEq = { "<=" }
+GreaterThanEq = { ">=" }
+Asterisk = { "*" }
+Slash = { "/" }
+Percent = { "%" }
+Plus = { "+" }
+Minus = { "-" }
+True = { "true" }
+False = { "false" }
+
+keyword = {
+  "fn" |
+  "let" |
+  "if" | "else" |
+  "or" | "and" |
+  "break" | "continue" | "return" |
+  True | False
+}
+identifier = @{ !keyword ~ XID_START ~ XID_CONTINUE* }
+WHITESPACE = _{ " " | "\n" }
+COMMENT = _{ "#" ~ ANY* }
