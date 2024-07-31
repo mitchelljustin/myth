@@ -1,6 +1,11 @@
-use crate::ast;
 use pest::Parser;
 use thiserror::Error;
+
+use crate::ast;
+
+#[cfg(test)]
+mod tests;
+mod transform;
 
 #[derive(pest_derive::Parser)]
 #[grammar = "src/parse/myth.pest"]
@@ -14,7 +19,7 @@ pub enum Error {
     TransformFailed(transform::TransformError),
 }
 
-pub fn parse(source: impl AsRef<str>) -> Result<ast::AST, Error> {
+pub fn parse(source: impl AsRef<str>) -> Result<ast::AST<ast::Library>, Error> {
     let mut root_pair =
         MythParser::parse(Rule::Library, source.as_ref()).map_err(Error::PestParseFailed)?;
     let ast = transform::transform_library(root_pair.next().expect("no library"))
@@ -22,6 +27,8 @@ pub fn parse(source: impl AsRef<str>) -> Result<ast::AST, Error> {
     Ok(ast)
 }
 
-#[cfg(test)]
-mod tests;
-mod transform;
+pub struct Span {
+    pub source: String,
+    pub rule: Rule,
+    pub line_col: (usize, usize),
+}

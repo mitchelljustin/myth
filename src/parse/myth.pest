@@ -1,9 +1,13 @@
 Library = { Item* }
 
-Item = { FuncDef }
+Item = { FunctionDef }
 
-FuncDef = {
-  "fn" ~ identifier ~ ParamList ~ Type ~ Block
+FunctionDef = {
+  "fn"
+  ~ identifier
+  ~ ParamList
+  ~ Type
+  ~ Block
 }
 
 Block = {
@@ -16,10 +20,21 @@ StatementList = {
 
 Statement = {
   Assignment |
+  IfStmt |
   BreakStmt |
   ContinueStmt |
   ReturnStmt |
   Expression
+}
+
+IfStmt = {
+  "if" 
+  ~ Expression 
+  ~ Block 
+  ~ (
+    "else" 
+    ~ Block
+  )?
 }
 
 BreakStmt = { "break" }
@@ -27,11 +42,14 @@ ContinueStmt = { "continue" }
 ReturnStmt = { "return" ~ Expression? }
 
 Assignment = {
-  "let" ~ LValue ~ "=" ~ Expression
+  "let" 
+  ~ LValue 
+  ~ "=" 
+  ~ Expression
 }
 
 LValue = {
-  identifier
+  Expression
 }
 
 Expression = {
@@ -39,15 +57,18 @@ Expression = {
 }
 
 OrExpr = {
-  AndExpr ~ ("or" ~ AndExpr)*
+  AndExpr 
+  ~ ("or" ~ AndExpr)*
 }
 
 AndExpr = {
-  ComparisonExpr ~ ("and" ~ ComparisonExpr)*
+  ComparisonExpr 
+  ~ ("and" ~ ComparisonExpr)*
 }
 
 ComparisonExpr = {
-  TermExpr ~ (ComparisonOperator ~ TermExpr)*
+  TermExpr 
+  ~ (ComparisonOperator ~ TermExpr)*
 }
 
 ComparisonOperator = {
@@ -55,7 +76,8 @@ ComparisonOperator = {
 }
 
 TermExpr = {
-  FactorExpr ~ (TermOperator ~ FactorExpr)*
+  FactorExpr 
+  ~ (TermOperator ~ FactorExpr)*
 }
 
 TermOperator = {
@@ -63,7 +85,8 @@ TermOperator = {
 }
 
 FactorExpr = {
-  LeafExpr ~ (FactorOperator ~ LeafExpr)*
+  LeafExpr 
+  ~ (FactorOperator ~ LeafExpr)*
 }
 
 FactorOperator = {
@@ -71,12 +94,13 @@ FactorOperator = {
 }
 
 CallExpr = {
-  LeafExpr ~ ArgumentList*
+  LeafExpr 
+  ~ ArgumentList*
 }
 
 ArgumentList = {
   ("(" ~ ")") |
-  ("(" ~ Expression ~ ("," ~ Expression)* ~ ")")
+  ("(" ~ Expression ~ ("," ~ Expression)* ~ ","? ~ ")")
 }
 
 LeafExpr = {
@@ -116,7 +140,7 @@ PathExpr = {
 
 ParamList = {
   ("(" ~ ")") |
-  ("(" ~ ParamDecl ~ ")")
+  ("(" ~ ParamDecl ~ ("," ~ ParamDecl)* ~ ","? ~ ")")
 }
 
 ParamDecl = {
@@ -155,5 +179,5 @@ keyword = {
   True | False
 }
 identifier = @{ !keyword ~ XID_START ~ XID_CONTINUE* }
-WHITESPACE = _{ " " | "\n" }
+WHITESPACE = _{ " " | NEWLINE }
 COMMENT = _{ "#" ~ ANY* }
