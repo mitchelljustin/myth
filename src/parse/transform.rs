@@ -1,10 +1,20 @@
+use std::num::{ParseFloatError, ParseIntError};
+
 use thiserror::Error;
 
+use TransformError::InvalidFloatLiteral;
+
 use crate::ast;
+use crate::parse::transform::TransformError::InvalidIntegerLiteral;
 use crate::parse::{Rule, Span};
 
 #[derive(Error, Debug)]
-pub enum TransformError {}
+pub enum TransformError {
+    #[error("invalid integer literal '{0}': {1}")]
+    InvalidIntegerLiteral(String, ParseIntError),
+    #[error("invalid float literal '{0}': {1}")]
+    InvalidFloatLiteral(String, ParseFloatError),
+}
 
 type TransformResult<T> = Result<ast::AST<T>, TransformError>;
 type Pair<'a> = pest::iterators::Pair<'a, Rule>;
@@ -90,7 +100,128 @@ pub fn transform_path(pair: Pair) -> TransformResult<ast::Path> {
 }
 
 pub fn transform_block(pair: Pair) -> TransformResult<ast::Block> {
-    create(&pair, ast::Block(vec![]))
+    let pair = pair.into_inner().next().expect("block");
+    create(
+        &pair,
+        ast::Block(
+            pair.clone()
+                .into_inner()
+                .map(transform_statement)
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
+    )
+}
+
+pub fn transform_statement(pair: Pair) -> TransformResult<ast::Statement> {
+    let pair = pair.into_inner().next().expect("statement");
+    let rule = pair.as_rule();
+    match rule {
+        Rule::Assignment => {
+            unimplemented!()
+        }
+        Rule::IfStmt => {
+            unimplemented!()
+        }
+        Rule::BreakStmt => {
+            unimplemented!()
+        }
+        Rule::ContinueStmt => {
+            unimplemented!()
+        }
+        Rule::ReturnStmt => {
+            unimplemented!()
+        }
+        Rule::Expression => create(
+            &pair,
+            ast::Statement::Expression(transform_expression(
+                pair.clone().into_inner().next().expect("swag"),
+            )?),
+        ),
+        _ => unreachable!("transform_statement {rule:?}"),
+    }
+}
+
+pub fn transform_operator(pair: &Pair) -> ast::Operator {
+    match pair.as_rule() {
+        Rule::EqEq => ast::Operator::EqEq,
+        Rule::NotEq => ast::Operator::NotEq,
+        Rule::LessThan => ast::Operator::Lt,
+        Rule::GreaterThan => ast::Operator::Gt,
+        Rule::LessThanEq => ast::Operator::Lte,
+        Rule::GreaterThanEq => ast::Operator::Gte,
+        Rule::Asterisk => ast::Operator::Mul,
+        Rule::Slash => ast::Operator::Div,
+        Rule::Percent => ast::Operator::Rem,
+        Rule::Plus => ast::Operator::Add,
+        Rule::Minus => ast::Operator::Sub,
+        rule => unreachable!("transform_operator {rule:?}"),
+    }
+}
+
+pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
+    let rule = pair.as_rule();
+    match rule {
+        Rule::Expression | Rule::LeafExpr | Rule::GroupedExpr => {
+            transform_expression(pair.into_inner().next().unwrap())
+        }
+        Rule::PathExpr => {
+            let path = transform_path(pair.clone())?;
+            create(&pair, ast::Expression::Path(path))
+        }
+        Rule::LiteralExpr => {
+            let literal = pair.clone().into_inner().next().unwrap();
+            let inner =
+                match literal.as_rule() {
+                    Rule::StringLiteral => ast::Literal::String(literal.as_str().to_string()),
+                    Rule::IntegerLiteral => {
+                        let value = literal.as_str().parse().map_err(|err| {
+                            InvalidIntegerLiteral(literal.as_str().to_string(), err)
+                        })?;
+                        ast::Literal::Integer(value)
+                    }
+                    Rule::FloatLiteral => {
+                        let value = literal.as_str().parse().map_err(|err| {
+                            InvalidFloatLiteral(literal.as_str().to_string(), err)
+                        })?;
+                        ast::Literal::Float(value)
+                    }
+                    Rule::BooleanLiteral => {
+                        let value = match literal.into_inner().next().unwrap().as_rule() {
+                            Rule::True => true,
+                            Rule::False => true,
+                            _ => unreachable!(),
+                        };
+                        ast::Literal::Bool(value)
+                    }
+                    rule => unreachable!("literal {rule:?}"),
+                };
+            create(&pair, ast::Expression::Literal(create(&pair, inner)?))
+        }
+        Rule::OrExpr | Rule::AndExpr | Rule::ComparisonExpr | Rule::FactorExpr | Rule::TermExpr => {
+            let mut inner = pair.clone().into_inner();
+            let mut lhs = transform_expression(inner.next().unwrap())?;
+            for [op, rhs] in inner.array_chunks() {
+                let operator = transform_operator(&op);
+                let rhs = transform_expression(rhs)?;
+                let bin_expr = ast::AST::<ast::BinaryExpr> {
+                    span: Span {
+                        rule,
+                        line_col: lhs.span.line_col,
+                        source: format!(
+                            "{} {} {}",
+                            &lhs.span.source,
+                            op.as_str(),
+                            &rhs.span.source
+                        ),
+                    },
+                    v: Box::new(ast::BinaryExpr { lhs, rhs, operator }),
+                };
+                lhs = create(&pair, ast::Expression::BinaryExpr(bin_expr))?;
+            }
+            Ok(lhs)
+        }
+        _ => unreachable!("transform_expression {rule:?}"),
+    }
 }
 
 pub fn transform_ident(pair: Pair) -> TransformResult<ast::Ident> {

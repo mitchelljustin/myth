@@ -1,6 +1,6 @@
 Library = { Item* }
 
-Item = { FunctionDef }
+Item = { NEWLINE* ~ FunctionDef ~ NEWLINE* }
 
 FunctionDef = {
   "fn"
@@ -28,11 +28,11 @@ Statement = {
 }
 
 IfStmt = {
-  "if" 
-  ~ Expression 
-  ~ Block 
+  "if"
+  ~ Expression
+  ~ Block
   ~ (
-    "else" 
+    "else"
     ~ Block
   )?
 }
@@ -42,9 +42,9 @@ ContinueStmt = { "continue" }
 ReturnStmt = { "return" ~ Expression? }
 
 Assignment = {
-  "let" 
-  ~ LValue 
-  ~ "=" 
+  "let"
+  ~ LValue
+  ~ "="
   ~ Expression
 }
 
@@ -57,44 +57,44 @@ Expression = {
 }
 
 OrExpr = {
-  AndExpr 
+  AndExpr
   ~ ("or" ~ AndExpr)*
 }
 
 AndExpr = {
-  ComparisonExpr 
+  ComparisonExpr
   ~ ("and" ~ ComparisonExpr)*
 }
 
 ComparisonExpr = {
-  TermExpr 
+  TermExpr
   ~ (ComparisonOperator ~ TermExpr)*
 }
 
-ComparisonOperator = {
+ComparisonOperator = _{
   EqEq | NotEq | LessThan | GreaterThan | LessThanEq | GreaterThanEq
 }
 
 TermExpr = {
-  FactorExpr 
+  FactorExpr
   ~ (TermOperator ~ FactorExpr)*
 }
 
-TermOperator = {
+TermOperator = _{
   Plus | Minus
 }
 
 FactorExpr = {
-  LeafExpr 
+  LeafExpr
   ~ (FactorOperator ~ LeafExpr)*
 }
 
-FactorOperator = {
+FactorOperator = _{
   Asterisk | Slash | Percent
 }
 
 CallExpr = {
-  LeafExpr 
+  LeafExpr
   ~ ArgumentList*
 }
 

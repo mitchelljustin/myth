@@ -27,6 +27,7 @@ pub fn parse(source: impl AsRef<str>) -> Result<ast::AST<ast::Library>, Error> {
     Ok(ast)
 }
 
+#[derive(Debug, Clone)]
 pub struct Span {
     pub source: String,
     pub rule: Rule,
