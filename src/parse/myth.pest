@@ -15,8 +15,10 @@ Block = {
 }
 
 StatementList = {
-  (Statement ~ ";")* ~ Statement ~ ";"?
+  (Statement ~ ";")* ~ Statement ~ LastSemi?
 }
+
+LastSemi = { ";" }
 
 Statement = {
   Assignment |

@@ -111,14 +111,22 @@ pub fn transform_path(pair: Pair) -> TransformResult<ast::Path> {
 
 pub fn transform_block(pair: Pair) -> TransformResult<ast::Block> {
     let pair = pair.into_inner().next().expect("block");
+    let mut has_last_semi = false;
+    let mut statements = vec![];
+    for pair in pair.clone().into_inner() {
+        if pair.as_rule() == Rule::LastSemi {
+            has_last_semi = true;
+            continue;
+        }
+        let statement = transform_statement(pair)?;
+        statements.push(statement);
+    }
     create(
         &pair,
-        ast::Block(
-            pair.clone()
-                .into_inner()
-                .map(transform_statement)
-                .collect::<Result<Vec<_>, _>>()?,
-        ),
+        ast::Block {
+            statements,
+            has_last_semi,
+        },
     )
 }
 

@@ -128,7 +128,10 @@ impl fmt::Display for Operator {
 }
 
 #[derive(Debug, Clone)]
-pub struct Block(pub(crate) Vec<Ast<Statement>>);
+pub struct Block {
+    pub(crate) statements: Vec<Ast<Statement>>,
+    pub has_last_semi: bool,
+}
 
 #[derive(Debug, Clone)]
 pub struct Ident(pub(crate) String);
