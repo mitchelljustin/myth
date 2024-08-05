@@ -68,7 +68,8 @@ impl Compiler {
         } else {
             self.type_section.function(param_types, []);
         }
-        self.function_section.function(self.func_def_count);
+        let func_index = self.func_def_count;
+        self.function_section.function(func_index);
         self.call_frame = Default::default();
         let mut local_type_counts = HashMap::<ValType, u32>::new();
         let mut locals = HashMap::<String, u32>::new();
@@ -105,15 +106,14 @@ impl Compiler {
         for (name, index) in params.iter() {
             locals.insert(name.clone(), *index);
         }
+        self.functions
+            .insert(func_def.v.name.v.0.clone(), func_index);
         self.call_frame = CallFrame { params, locals };
         self.current_function = Some(Function::new(
             local_type_counts.into_iter().map(|(k, v)| (v, k)),
         ));
-        self.export_section.export(
-            func_def.v.name.v.0.as_str(),
-            ExportKind::Func,
-            self.func_def_count,
-        );
+        self.export_section
+            .export(func_def.v.name.v.0.as_str(), ExportKind::Func, func_index);
         self.compile_block(func_def.v.body)?;
         self.emit(&Instruction::End);
         self.code_section

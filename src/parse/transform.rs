@@ -35,9 +35,11 @@ pub fn transform_library(pair: Pair) -> TransformResult<ast::Library> {
     let rule = pair.as_rule();
     match rule {
         Rule::Library => {
-            let items = pair
+            let pairs = pair.clone().into_inner().collect::<Vec<_>>();
+            let items = pairs
                 .clone()
-                .into_inner()
+                .into_iter()
+                .filter(|pair| pair.as_rule() != Rule::EOI)
                 .map(transform_item)
                 .collect::<Result<Vec<_>, _>>()?;
             create(&pair, ast::Library { items })
@@ -244,6 +246,21 @@ pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
                 lhs = create(&pair, ast::Expression::BinaryExpr(bin_expr))?;
             }
             Ok(lhs)
+        }
+        Rule::CallExpr => {
+            let mut inner = pair.clone().into_inner();
+            let mut expr = transform_expression(inner.next().expect("callee"))?;
+            for arg_list in inner {
+                let args = arg_list
+                    .into_inner()
+                    .map(transform_expression)
+                    .collect::<Result<_, _>>()?;
+                expr = create(
+                    &pair,
+                    ast::Expression::Call(create(&pair, ast::Call { callee: expr, args })?),
+                )?;
+            }
+            Ok(expr)
         }
         _ => unreachable!("transform_expression {rule:?}"),
     }

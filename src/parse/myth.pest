@@ -1,6 +1,6 @@
-Library = { Item* }
+Library = { SOI ~ Item* ~ EOI }
 
-Item = { NEWLINE* ~ FunctionDef ~ NEWLINE* }
+Item = { FunctionDef }
 
 FunctionDef = {
   "fn"
@@ -88,8 +88,8 @@ TermOperator = _{
 }
 
 FactorExpr = {
-  LeafExpr
-  ~ (FactorOperator ~ LeafExpr)*
+  CallExpr
+  ~ (FactorOperator ~ CallExpr)*
 }
 
 FactorOperator = _{
@@ -107,9 +107,9 @@ ArgumentList = {
 }
 
 LeafExpr = {
+  PathExpr |
   LiteralExpr |
-  GroupedExpr |
-  PathExpr
+  GroupedExpr
 }
 
 LiteralExpr = {

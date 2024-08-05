@@ -27,7 +27,14 @@ struct Args {
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let source = fs::read_to_string(args.input_file)?;
-    let lib = parse::parse(source)?;
+    let lib = match parse::parse(source) {
+        Err(parse::Error::PestParseFailed(err)) => {
+            eprintln!("parse error: \n{err}");
+            return Err(err.into());
+        }
+        Err(err) => return Err(err.into()),
+        Ok(lib) => lib,
+    };
     let module = compile::compile(lib)?;
     if let Some(parent) = args.out_file.parent() {
         fs::create_dir_all(parent)?;
