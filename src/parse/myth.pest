@@ -136,7 +136,7 @@ BooleanLiteral = {
 GroupedExpr = { "(" ~ Expression ~ ")" }
 
 PathExpr = {
-  identifier ~ ("::" ~ identifier)*
+  Path
 }
 
 ParamList = {
@@ -148,12 +148,16 @@ ParamDecl = {
   identifier ~ Type
 }
 
-Type = {
+Type = _{
   Path
 }
 
-Path = @{
-  identifier ~ ("::" ~ identifier)*
+Path = ${
+  PathSegment ~ ("::" ~ PathSegment)*
+}
+
+PathSegment = {
+  identifier
 }
 
 

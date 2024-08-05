@@ -1,3 +1,4 @@
+use std::assert_matches::debug_assert_matches;
 use std::num::{ParseFloatError, ParseIntError};
 
 use thiserror::Error;
@@ -91,6 +92,7 @@ pub fn transform_param_decl(pair: Pair) -> TransformResult<ast::ParamDecl> {
 }
 
 pub fn transform_path(pair: Pair) -> TransformResult<ast::Path> {
+    debug_assert_matches!(pair.as_rule(), Rule::Path);
     let components = pair
         .clone()
         .into_inner()
@@ -117,7 +119,14 @@ pub fn transform_statement(pair: Pair) -> TransformResult<ast::Statement> {
     let rule = pair.as_rule();
     match rule {
         Rule::Assignment => {
-            unimplemented!()
+            let [target, ty, value] = pair.clone().into_inner().next_chunk().unwrap();
+            let target = transform_expression(target)?;
+            let ty = transform_path(ty)?;
+            let value = transform_expression(value)?;
+            create(
+                &pair,
+                ast::Statement::Assignment(create(&pair, ast::Assignment { value, target, ty })?),
+            )
         }
         Rule::IfStmt => {
             unimplemented!()
@@ -161,11 +170,11 @@ pub fn transform_operator(pair: &Pair) -> ast::Operator {
 pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
     let rule = pair.as_rule();
     match rule {
-        Rule::Expression | Rule::LeafExpr | Rule::GroupedExpr => {
+        Rule::Expression | Rule::LeafExpr | Rule::GroupedExpr | Rule::LValue => {
             transform_expression(pair.into_inner().next().unwrap())
         }
         Rule::PathExpr => {
-            let path = transform_path(pair.clone())?;
+            let path = transform_path(pair.clone().into_inner().next().unwrap())?;
             create(&pair, ast::Expression::Path(path))
         }
         Rule::LiteralExpr => {

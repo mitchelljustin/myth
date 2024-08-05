@@ -8,7 +8,7 @@ use wasm_encoder::{
 
 use crate::ast;
 use crate::ast::{Ast, Expression, Literal, Operator, Statement};
-use crate::compile::Error::NoOperatorForValtype;
+use crate::compile::Error::{InvalidLValue, NoOperatorForValtype};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -17,17 +17,22 @@ pub enum Error {
         operator: Operator,
         val_type: ValType,
     },
+    #[error("illegal lvalue: '{expression:?}'")]
+    InvalidLValue { expression: Ast<Expression> },
 }
 
 type Result<T = ()> = std::result::Result<T, Error>;
 
+#[derive(Default)]
 struct CallFrame {
+    params: HashMap<String, u32>,
     locals: HashMap<String, u32>,
 }
 
 #[derive(Default)]
 pub struct Compiler {
     func_def_count: u32,
+    call_frame: CallFrame,
     function: Option<Function>,
     import_section: ImportSection,
     data_section: DataSection,
@@ -62,18 +67,56 @@ impl Compiler {
             .iter()
             .map(|param| Self::ty_to_valtype(&param.v.ty))
             .collect::<Vec<_>>();
+        let params: HashMap<String, u32> = func_def
+            .v
+            .params
+            .iter()
+            .enumerate()
+            .map(|(i, param)| (param.v.name.v.0.clone(), i as u32))
+            .collect();
         let ret_type = Self::ty_to_valtype(&func_def.v.return_type);
         self.type_section.function(param_types, [ret_type]);
         self.function_section.function(self.func_def_count);
-        let mut locals_map = HashMap::<ValType, u32>::new();
-        for stmt in func_def.v.body.v.0.iter() {
-            if let Statement::Assignment(assn) = stmt.v.as_ref() {
-                let valtype = Self::ty_to_valtype(&assn.v.ty);
-                *locals_map.entry(valtype).or_default() += 1;
-            }
+        self.call_frame = Default::default();
+        let mut local_type_counts = HashMap::<ValType, u32>::new();
+        let mut locals = HashMap::<String, u32>::new();
+        let assignments = func_def
+            .v
+            .body
+            .v
+            .0
+            .iter()
+            .filter_map(|stmt| {
+                if let Statement::Assignment(assn) = stmt.v.as_ref() {
+                    Some(assn)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        for (i, assn) in assignments.into_iter().enumerate() {
+            let val_type = Self::ty_to_valtype(&assn.v.ty);
+            *local_type_counts.entry(val_type).or_default() += 1;
+            let target = &assn.v.target;
+            let Expression::Path(path) = target.v.as_ref() else {
+                return Err(Error::InvalidLValue {
+                    expression: target.clone(),
+                });
+            };
+            let [name] = path.v.0.as_slice() else {
+                return Err(Error::InvalidLValue {
+                    expression: target.clone(),
+                });
+            };
+            locals.insert(name.v.0.clone(), (i + params.len()) as u32);
         }
-        let pairs = locals_map.into_iter().map(|(k, v)| (v, k));
-        self.function = Some(Function::new(pairs));
+        for (name, index) in params.iter() {
+            locals.insert(name.clone(), *index);
+        }
+        self.call_frame = CallFrame { params, locals };
+        self.function = Some(Function::new(
+            local_type_counts.into_iter().map(|(k, v)| (v, k)),
+        ));
         self.compile_block(func_def.v.body)?;
         self.emit(&Instruction::End);
         self.code_section.function(self.function.as_ref().unwrap());
@@ -117,7 +160,23 @@ impl Compiler {
 
     fn compile_statement(&mut self, statement: Ast<Statement>) -> Result {
         match *statement.v {
-            Statement::Assignment(assn) => {}
+            Statement::Assignment(assn) => {
+                let target = assn.v.target;
+                let Expression::Path(path) = target.v.as_ref() else {
+                    return Err(InvalidLValue { expression: target });
+                };
+                let [name] = path.v.0.as_slice() else {
+                    return Err(InvalidLValue { expression: target });
+                };
+                let local_index = *self
+                    .call_frame
+                    .locals
+                    .get(name.v.0.as_str())
+                    .expect("no such local");
+
+                self.compile_expression(assn.v.value)?;
+                self.emit(&Instruction::LocalSet(local_index));
+            }
             Statement::Expression(expr) => {
                 self.compile_expression(expr)?;
             }
@@ -145,7 +204,17 @@ impl Compiler {
                 Literal::Float(_) => todo!(),
                 Literal::Bool(_) => todo!(),
             },
-            Expression::Path(path) => {}
+            Expression::Path(path) => {
+                let [name] = path.v.0.as_slice() else {
+                    unimplemented!();
+                };
+                let local_index = self
+                    .call_frame
+                    .locals
+                    .get(name.v.0.as_str())
+                    .expect("cannot find local");
+                self.emit(&Instruction::LocalGet(*local_index));
+            }
         }
         Ok(())
     }
