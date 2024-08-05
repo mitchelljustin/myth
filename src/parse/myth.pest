@@ -44,6 +44,7 @@ ReturnStmt = { "return" ~ Expression? }
 Assignment = {
   "let"
   ~ LValue
+  ~ Type
   ~ "="
   ~ Expression
 }
@@ -148,10 +149,10 @@ ParamDecl = {
 }
 
 Type = {
-  TypePath
+  Path
 }
 
-TypePath = {
+Path = @{
   identifier ~ ("::" ~ identifier)*
 }
 

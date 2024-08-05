@@ -16,11 +16,11 @@ pub enum TransformError {
     InvalidFloatLiteral(String, ParseFloatError),
 }
 
-type TransformResult<T> = Result<ast::AST<T>, TransformError>;
+type TransformResult<T> = Result<ast::Ast<T>, TransformError>;
 type Pair<'a> = pest::iterators::Pair<'a, Rule>;
 
 pub fn create<T>(pair: &Pair, v: T) -> TransformResult<T> {
-    Ok(ast::AST {
+    Ok(ast::Ast {
         span: Span {
             rule: pair.as_rule(),
             source: pair.as_str().to_string(),
@@ -203,7 +203,7 @@ pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
             for [op, rhs] in inner.array_chunks() {
                 let operator = transform_operator(&op);
                 let rhs = transform_expression(rhs)?;
-                let bin_expr = ast::AST::<ast::BinaryExpr> {
+                let bin_expr = ast::Ast::<ast::BinaryExpr> {
                     span: Span {
                         rule,
                         line_col: lhs.span.line_col,

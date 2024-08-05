@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use clap::Parser;
 
 mod ast;
-mod emit;
+mod compile;
 mod parse;
 
 #[derive(Parser, Debug)]
@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let source = fs::read_to_string(args.input_file)?;
     let lib = parse::parse(source)?;
-    let module = emit::emit_module(lib)?;
+    let module = compile::compile(lib)?;
     if let Some(parent) = args.out_file.parent() {
         fs::create_dir_all(parent)?;
     }

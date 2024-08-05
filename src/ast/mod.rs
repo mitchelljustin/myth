@@ -1,50 +1,53 @@
 use crate::parse;
+use std::fmt;
+use std::fmt::Formatter;
 
 #[derive(Debug, Clone)]
 pub struct Library {
-    pub(crate) items: Vec<AST<Item>>,
+    pub(crate) items: Vec<Ast<Item>>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Item {
-    FunctionDef(AST<FunctionDef>),
+    FunctionDef(Ast<FunctionDef>),
 }
 
 #[derive(Debug, Clone)]
 pub struct FunctionDef {
-    pub(crate) name: AST<Ident>,
-    pub(crate) params: Vec<AST<ParamDecl>>,
-    pub(crate) return_type: AST<Type>,
-    pub(crate) body: AST<Block>,
+    pub(crate) name: Ast<Ident>,
+    pub(crate) params: Vec<Ast<ParamDecl>>,
+    pub(crate) return_type: Ast<Type>,
+    pub(crate) body: Ast<Block>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ParamDecl {
-    pub(crate) name: AST<Ident>,
-    pub(crate) ty: AST<Type>,
+    pub(crate) name: Ast<Ident>,
+    pub(crate) ty: Ast<Type>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Statement {
-    Assignment(AST<Assignment>),
-    BreakStmt(AST<BreakStmt>),
-    ContinueStmt(AST<ContinueStmt>),
-    ReturnStmt(AST<ReturnStmt>),
-    IfStmt(AST<IfStmt>),
-    Expression(AST<Expression>),
+    Assignment(Ast<Assignment>),
+    BreakStmt(Ast<BreakStmt>),
+    ContinueStmt(Ast<ContinueStmt>),
+    ReturnStmt(Ast<ReturnStmt>),
+    IfStmt(Ast<IfStmt>),
+    Expression(Ast<Expression>),
 }
 
 #[derive(Debug, Clone)]
 pub struct IfStmt {
-    pub(crate) condition: AST<Expression>,
-    pub(crate) if_body: AST<Block>,
-    pub(crate) else_body: Option<AST<Block>>,
+    pub(crate) condition: Ast<Expression>,
+    pub(crate) if_body: Ast<Block>,
+    pub(crate) else_body: Option<Ast<Block>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Assignment {
-    pub(crate) target: AST<Expression>,
-    pub(crate) value: AST<Expression>,
+    pub(crate) target: Ast<Expression>,
+    pub(crate) ty: Ast<Path>,
+    pub(crate) value: Ast<Expression>,
 }
 
 #[derive(Debug, Clone)]
@@ -53,15 +56,15 @@ pub struct BreakStmt {}
 pub struct ContinueStmt {}
 #[derive(Debug, Clone)]
 pub struct ReturnStmt {
-    pub(crate) retval: Option<AST<Expression>>,
+    pub(crate) retval: Option<Ast<Expression>>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Expression {
-    BinaryExpr(AST<BinaryExpr>),
-    Call(AST<Call>),
-    Literal(AST<Literal>),
-    Path(AST<Path>),
+    BinaryExpr(Ast<BinaryExpr>),
+    Call(Ast<Call>),
+    Literal(Ast<Literal>),
+    Path(Ast<Path>),
 }
 
 #[derive(Debug, Clone)]
@@ -75,22 +78,22 @@ pub enum Literal {
 pub type Type = Path;
 
 #[derive(Debug, Clone)]
-pub struct Path(pub(crate) Vec<AST<Ident>>);
+pub struct Path(pub(crate) Vec<Ast<Ident>>);
 
 #[derive(Debug, Clone)]
 pub struct Call {
-    pub(crate) callee: AST<Expression>,
-    pub(crate) args: Vec<AST<Expression>>,
+    pub(crate) callee: Ast<Expression>,
+    pub(crate) args: Vec<Ast<Expression>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct BinaryExpr {
-    pub(crate) lhs: AST<Expression>,
-    pub(crate) rhs: AST<Expression>,
+    pub(crate) lhs: Ast<Expression>,
+    pub(crate) rhs: Ast<Expression>,
     pub(crate) operator: Operator,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum Operator {
     EqEq,
     NotEq,
@@ -105,14 +108,33 @@ pub enum Operator {
     Sub,
 }
 
+impl fmt::Display for Operator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let as_str = match self {
+            Operator::EqEq => "==",
+            Operator::NotEq => "!=",
+            Operator::Lt => "<",
+            Operator::Gt => ">",
+            Operator::Lte => "<=",
+            Operator::Gte => ">=",
+            Operator::Mul => "*",
+            Operator::Div => "/",
+            Operator::Rem => "%",
+            Operator::Add => "+",
+            Operator::Sub => "-",
+        };
+        f.write_str(as_str)
+    }
+}
+
 #[derive(Debug, Clone)]
-pub struct Block(pub(crate) Vec<AST<Statement>>);
+pub struct Block(pub(crate) Vec<Ast<Statement>>);
 
 #[derive(Debug, Clone)]
 pub struct Ident(pub(crate) String);
 
 #[derive(Debug, Clone)]
-pub struct AST<T> {
+pub struct Ast<T> {
     pub(crate) v: Box<T>,
     pub(crate) span: parse::Span,
 }
