@@ -51,17 +51,25 @@ pub fn transform_item(pair: Pair) -> TransformResult<ast::Item> {
     let rule = pair.as_rule();
     match rule {
         Rule::FunctionDef => {
-            let [name, params, return_type, body] = pair
-                .clone()
-                .into_inner()
-                .next_chunk()
-                .expect("function def");
+            let mut inner = pair.clone().into_inner();
+            let [name, params, ret_type_or_body] = inner.next_chunk().expect("function def");
+            let return_type;
+            let body;
+            if matches!(ret_type_or_body.as_rule(), Rule::Block) {
+                return_type = None;
+                body = ret_type_or_body;
+            } else {
+                return_type = Some(ret_type_or_body);
+                body = inner.next().unwrap();
+            }
             let name = transform_ident(name)?;
             let params = params
                 .into_inner()
                 .map(transform_param_decl)
                 .collect::<Result<Vec<_>, _>>()?;
-            let return_type = transform_path(return_type)?;
+            let return_type = return_type
+                .map(|return_type| transform_path(return_type))
+                .transpose()?;
             let body = transform_block(body)?;
             create(
                 &pair,

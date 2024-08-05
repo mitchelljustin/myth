@@ -6,7 +6,7 @@ FunctionDef = {
   "fn"
   ~ identifier
   ~ ParamList
-  ~ Type
+  ~ Type?
   ~ Block
 }
 
@@ -183,6 +183,6 @@ keyword = {
   "break" | "continue" | "return" |
   True | False
 }
-identifier = @{ !keyword ~ XID_START ~ XID_CONTINUE* }
+identifier = @{ !keyword ~ (XID_START | "_") ~ (XID_CONTINUE | "_")* }
 WHITESPACE = _{ " " | NEWLINE }
 COMMENT = _{ "#" ~ ANY* }

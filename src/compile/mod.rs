@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 use wasm_encoder::{
-    CodeSection, DataSection, ExportSection, Function, FunctionSection, ImportSection, Instruction,
-    Module, TypeSection, ValType,
+    CodeSection, DataSection, ExportKind, ExportSection, Function, FunctionSection, ImportSection,
+    Instruction, Module, TypeSection, ValType,
 };
 
 use crate::ast;
@@ -74,8 +74,12 @@ impl Compiler {
             .enumerate()
             .map(|(i, param)| (param.v.name.v.0.clone(), i as u32))
             .collect();
-        let ret_type = Self::ty_to_valtype(&func_def.v.return_type);
-        self.type_section.function(param_types, [ret_type]);
+        if let Some(ret_type) = &func_def.v.return_type {
+            self.type_section
+                .function(param_types, [Self::ty_to_valtype(ret_type)]);
+        } else {
+            self.type_section.function(param_types, []);
+        }
         self.function_section.function(self.func_def_count);
         self.call_frame = Default::default();
         let mut local_type_counts = HashMap::<ValType, u32>::new();
@@ -117,6 +121,11 @@ impl Compiler {
         self.function = Some(Function::new(
             local_type_counts.into_iter().map(|(k, v)| (v, k)),
         ));
+        self.export_section.export(
+            func_def.v.name.v.0.as_str(),
+            ExportKind::Func,
+            self.func_def_count,
+        );
         self.compile_block(func_def.v.body)?;
         self.emit(&Instruction::End);
         self.code_section.function(self.function.as_ref().unwrap());

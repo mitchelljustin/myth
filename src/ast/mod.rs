@@ -16,7 +16,7 @@ pub enum Item {
 pub struct FunctionDef {
     pub(crate) name: Ast<Ident>,
     pub(crate) params: Vec<Ast<ParamDecl>>,
-    pub(crate) return_type: Ast<Type>,
+    pub(crate) return_type: Option<Ast<Type>>,
     pub(crate) body: Ast<Block>,
 }
 
