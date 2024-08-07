@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 
 use wasm_encoder::{
-    CodeSection, DataSection, ExportKind, ExportSection, Function, FunctionSection, ImportSection,
-    Instruction, Module, TypeSection, ValType,
+    CodeSection, DataSection, Encode, ExportKind, ExportSection, Function, FunctionSection,
+    ImportSection, Instruction, Module, TypeSection, ValType,
 };
 
-use crate::ast::{Ast, Expression, Literal, Operator, Statement};
-use crate::compile::Error;
+use crate::ast::{Assignment, Ast, Block, Expression, Literal, Operator, Statement};
 use crate::compile::Error::{InvalidLValue, NoOperatorForValType, NoSuchFunction};
 use crate::{ast, compile};
 
@@ -18,10 +17,9 @@ struct CallFrame {
 
 #[derive(Default)]
 pub struct Compiler {
-    func_def_count: u32,
-    functions: HashMap<String, u32>,
+    code_buffer: Vec<u8>,
+    func_name_to_index: HashMap<String, u32>,
     call_frame: CallFrame,
-    current_function: Option<Function>,
     import_section: ImportSection,
     data_section: DataSection,
     type_section: TypeSection,
@@ -49,12 +47,6 @@ impl Compiler {
     }
 
     fn compile_func_def(&mut self, func_def: Ast<ast::FunctionDef>) -> compile::Result {
-        let param_types = func_def
-            .v
-            .params
-            .iter()
-            .map(|param| Self::ty_to_valtype(&param.v.ty))
-            .collect::<Vec<_>>();
         let params: HashMap<String, u32> = func_def
             .v
             .params
@@ -62,20 +54,55 @@ impl Compiler {
             .enumerate()
             .map(|(i, param)| (param.v.name.v.0.clone(), i as u32))
             .collect();
-        if let Some(ret_type) = &func_def.v.return_type {
-            self.type_section
-                .function(param_types, [Self::ty_to_valtype(ret_type)]);
-        } else {
-            self.type_section.function(param_types, []);
-        }
-        let func_index = self.func_def_count;
-        self.function_section.function(func_index);
-        self.call_frame = Default::default();
         let mut local_type_counts = HashMap::<ValType, u32>::new();
         let mut locals = HashMap::<String, u32>::new();
-        let assignments = func_def
+        let func_body = func_def.v.body;
+        let assignments = Self::extract_assignments(&func_body);
+        for (i, assn) in assignments.into_iter().enumerate() {
+            let val_type = Self::ty_to_valtype(&assn.v.ty);
+            *local_type_counts.entry(val_type).or_default() += 1;
+            let target = &assn.v.target;
+            let Expression::Path(path) = target.v.as_ref() else {
+                continue;
+            };
+            let [name] = path.v.0.as_slice() else {
+                continue;
+            };
+            locals.insert(name.v.0.clone(), (i + params.len()) as u32);
+        }
+        for (name, &index) in params.iter() {
+            locals.insert(name.clone(), index);
+        }
+        // Set metadata
+        let func_index = self.function_section.len();
+        let func_name = func_def.v.name.v.0;
+        let param_types: Vec<ValType> = func_def
             .v
-            .body
+            .params
+            .iter()
+            .map(|param| Self::ty_to_valtype(&param.v.ty))
+            .collect();
+        let results = func_def.v.return_type.as_ref().map(Self::ty_to_valtype);
+        self.type_section.function(param_types, results);
+        self.function_section.function(func_index);
+        self.export_section
+            .export(func_name.as_str(), ExportKind::Func, func_index);
+
+        // Compile function code
+        self.func_name_to_index.insert(func_name, func_index);
+        self.call_frame = CallFrame { params, locals };
+        self.code_buffer.clear();
+        self.compile_block(func_body)?;
+        self.emit(&Instruction::End);
+        let mut function = Function::new(local_type_counts.into_iter().map(|(k, v)| (v, k)));
+        function.raw(self.code_buffer.drain(..));
+        self.code_section.function(&function);
+
+        Ok(())
+    }
+
+    fn extract_assignments(block: &Ast<Block>) -> Vec<&Ast<Assignment>> {
+        block
             .v
             .statements
             .iter()
@@ -86,40 +113,7 @@ impl Compiler {
                     None
                 }
             })
-            .collect::<Vec<_>>();
-        for (i, assn) in assignments.into_iter().enumerate() {
-            let val_type = Self::ty_to_valtype(&assn.v.ty);
-            *local_type_counts.entry(val_type).or_default() += 1;
-            let target = &assn.v.target;
-            let Expression::Path(path) = target.v.as_ref() else {
-                return Err(Error::InvalidLValue {
-                    expression: target.clone(),
-                });
-            };
-            let [name] = path.v.0.as_slice() else {
-                return Err(Error::InvalidLValue {
-                    expression: target.clone(),
-                });
-            };
-            locals.insert(name.v.0.clone(), (i + params.len()) as u32);
-        }
-        for (name, index) in params.iter() {
-            locals.insert(name.clone(), *index);
-        }
-        self.functions
-            .insert(func_def.v.name.v.0.clone(), func_index);
-        self.call_frame = CallFrame { params, locals };
-        self.current_function = Some(Function::new(
-            local_type_counts.into_iter().map(|(k, v)| (v, k)),
-        ));
-        self.export_section
-            .export(func_def.v.name.v.0.as_str(), ExportKind::Func, func_index);
-        self.compile_block(func_def.v.body)?;
-        self.emit(&Instruction::End);
-        self.code_section
-            .function(self.current_function.as_ref().unwrap());
-        self.func_def_count += 1;
-        Ok(())
+            .collect()
     }
 
     fn ty_to_valtype(ty: &Ast<ast::Type>) -> ValType {
@@ -135,13 +129,10 @@ impl Compiler {
     }
 
     fn emit(&mut self, instruction: &Instruction) {
-        self.current_function
-            .as_mut()
-            .unwrap()
-            .instruction(instruction);
+        instruction.encode(&mut self.code_buffer);
     }
 
-    pub fn finish(&self) -> Module {
+    pub fn finish(self) -> Module {
         let mut module = Module::new();
         module.section(&self.type_section);
         module.section(&self.import_section);
@@ -219,12 +210,12 @@ impl Compiler {
                             unimplemented!("path call");
                         };
                         let func_name = name.v.0.as_str();
-                        let Some(func_index) = self.functions.get(func_name) else {
+                        let Some(&func_index) = self.func_name_to_index.get(func_name) else {
                             return Err(NoSuchFunction {
                                 func_name: func_name.to_string(),
                             });
                         };
-                        self.emit(&Instruction::Call(*func_index));
+                        self.emit(&Instruction::Call(func_index));
                     }
                     expr => unimplemented!("call: {expr:?}"),
                 }
