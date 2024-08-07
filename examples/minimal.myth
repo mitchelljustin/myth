@@ -1,6 +1,7 @@
 
 fn add_ten(a i32) i32 {
-  a + 10
+  a + 10;
+  10
 }
 
 fn _start() i32 {
