@@ -6,6 +6,7 @@ use compiler::Compiler;
 use crate::ast;
 use crate::ast::Ast;
 
+mod analyzer;
 mod compiler;
 
 #[derive(Error, Debug)]
@@ -19,6 +20,8 @@ pub enum Error {
     InvalidLValue { expression: Ast<ast::Expression> },
     #[error("no such function: '{func_name}'")]
     NoSuchFunction { func_name: String },
+    #[error("`if` and `else` have incompatible types: expected {expected}, found {actual}")]
+    IfElseIncompatibleTypes { expected: String, actual: String },
 }
 
 type Result<T = ()> = std::result::Result<T, Error>;

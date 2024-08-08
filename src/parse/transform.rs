@@ -146,9 +146,6 @@ pub fn transform_statement(pair: Pair) -> TransformResult<ast::Statement> {
                 ast::Statement::Assignment(create(&pair, ast::Assignment { value, target, ty })?),
             )
         }
-        Rule::IfStmt => {
-            unimplemented!()
-        }
         Rule::BreakStmt => {
             unimplemented!()
         }
@@ -158,12 +155,11 @@ pub fn transform_statement(pair: Pair) -> TransformResult<ast::Statement> {
         Rule::ReturnStmt => {
             unimplemented!()
         }
-        Rule::Expression => create(
-            &pair,
-            ast::Statement::Expression(transform_expression(
-                pair.clone().into_inner().next().expect("swag"),
-            )?),
-        ),
+        Rule::Expression => {
+            let expression =
+                transform_expression(pair.clone().into_inner().next().expect("expression"))?;
+            create(&pair, ast::Statement::Expression(expression))
+        }
         _ => unreachable!("transform_statement {rule:?}"),
     }
 }
@@ -261,6 +257,25 @@ pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
                 )?;
             }
             Ok(expr)
+        }
+        Rule::IfExpr => {
+            let mut inner = pair.clone().into_inner();
+            let [condition, then_body] = inner.next_chunk().unwrap();
+            let else_body = inner.next();
+            let condition = transform_expression(condition)?;
+            let then_body = transform_block(then_body)?;
+            let else_body = else_body.map(transform_block).transpose()?;
+            create(
+                &pair,
+                ast::Expression::IfExpr(create(
+                    &pair,
+                    ast::IfExpr {
+                        condition,
+                        then_body,
+                        else_body,
+                    },
+                )?),
+            )
         }
         _ => unreachable!("transform_expression {rule:?}"),
     }

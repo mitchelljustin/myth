@@ -22,14 +22,13 @@ LastSemi = { ";" }
 
 Statement = {
   Assignment |
-  IfStmt |
   BreakStmt |
   ContinueStmt |
   ReturnStmt |
   Expression
 }
 
-IfStmt = {
+IfExpr = {
   "if"
   ~ Expression
   ~ Block
@@ -56,6 +55,7 @@ LValue = {
 }
 
 Expression = {
+  IfExpr |
   OrExpr
 }
 

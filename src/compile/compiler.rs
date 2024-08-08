@@ -1,12 +1,15 @@
 use std::collections::HashMap;
 
 use wasm_encoder::{
-    CodeSection, DataSection, Encode, ExportKind, ExportSection, Function, FunctionSection,
-    ImportSection, Instruction, Module, TypeSection, ValType,
+    BlockType, CodeSection, DataSection, Encode, ExportKind, ExportSection, Function,
+    FunctionSection, ImportSection, Instruction, Module, TypeSection, ValType,
 };
 
-use crate::ast::{Assignment, Ast, Block, Expression, Literal, Operator, Statement};
-use crate::compile::Error::{InvalidLValue, NoOperatorForValType, NoSuchFunction};
+use crate::ast::{Ast, Expression, Literal, Operator, Statement};
+use crate::compile::analyzer;
+use crate::compile::Error::{
+    IfElseIncompatibleTypes, InvalidLValue, NoOperatorForValType, NoSuchFunction,
+};
 use crate::{ast, compile};
 
 #[derive(Default)]
@@ -57,9 +60,9 @@ impl Compiler {
         let mut local_type_counts = HashMap::<ValType, u32>::new();
         let mut locals = HashMap::<String, u32>::new();
         let func_body = func_def.v.body;
-        let assignments = Self::extract_assignments(&func_body);
+        let assignments = analyzer::extract_assignments(&func_body);
         for (i, assn) in assignments.into_iter().enumerate() {
-            let val_type = Self::ty_to_valtype(&assn.v.ty);
+            let val_type = analyzer::ty_to_valtype(&assn.v.ty);
             *local_type_counts.entry(val_type).or_default() += 1;
             let target = &assn.v.target;
             let Expression::Path(path) = target.v.as_ref() else {
@@ -80,9 +83,9 @@ impl Compiler {
             .v
             .params
             .iter()
-            .map(|param| Self::ty_to_valtype(&param.v.ty))
+            .map(|param| analyzer::ty_to_valtype(&param.v.ty))
             .collect();
-        let results = func_def.v.return_type.as_ref().map(Self::ty_to_valtype);
+        let results = func_def.v.return_type.as_ref().map(analyzer::ty_to_valtype);
         self.type_section.function(param_types, results);
         self.function_section.function(func_index);
         self.export_section
@@ -99,33 +102,6 @@ impl Compiler {
         self.code_section.function(&function);
 
         Ok(())
-    }
-
-    fn extract_assignments(block: &Ast<Block>) -> Vec<&Ast<Assignment>> {
-        block
-            .v
-            .statements
-            .iter()
-            .filter_map(|stmt| {
-                if let Statement::Assignment(assn) = stmt.v.as_ref() {
-                    Some(assn)
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    fn ty_to_valtype(ty: &Ast<ast::Type>) -> ValType {
-        match ty.v.0.as_slice() {
-            [builtin_ty] => match builtin_ty.v.0.as_str() {
-                "i32" => ValType::I32,
-                "i64" => ValType::I64,
-                "f64" => ValType::F64,
-                newtype => unimplemented!("newtype: {newtype:?}"),
-            },
-            path_type => unimplemented!("path type: {path_type:?}"),
-        }
     }
 
     fn emit(&mut self, instruction: &Instruction) {
@@ -188,7 +164,6 @@ impl Compiler {
             Statement::BreakStmt(_) => todo!(),
             Statement::ContinueStmt(_) => todo!(),
             Statement::ReturnStmt(_) => todo!(),
-            Statement::IfStmt(_) => todo!(),
         }
         Ok(())
     }
@@ -238,6 +213,50 @@ impl Compiler {
                     .get(name.v.0.as_str())
                     .expect("cannot find local");
                 self.emit(&Instruction::LocalGet(*local_index));
+            }
+            Expression::IfExpr(if_expr) => {
+                let ast::IfExpr {
+                    condition,
+                    then_body,
+                    else_body,
+                } = *if_expr.v;
+                self.compile_expression(condition)?;
+                let then_body_result_type = analyzer::infer_block_result_type(&then_body);
+                let else_body_result_type =
+                    else_body.as_ref().map(analyzer::infer_block_result_type);
+                let block_type = match (then_body_result_type, else_body_result_type) {
+                    (Some(then_result_type), Some(Some(else_result_type))) => {
+                        if then_result_type != else_result_type {
+                            return Err(IfElseIncompatibleTypes {
+                                expected: format!("{then_body_result_type:?}"),
+                                actual: format!("{else_body_result_type:?}"),
+                            });
+                        }
+                        BlockType::Result(then_result_type)
+                    }
+                    (Some(then_result_type), Some(None)) => {
+                        return Err(IfElseIncompatibleTypes {
+                            expected: format!("{then_result_type:?}"),
+                            actual: "nothing".to_string(),
+                        })
+                    }
+                    (Some(_), None) => BlockType::Empty,
+                    (None, Some(Some(else_result_type))) => {
+                        return Err(IfElseIncompatibleTypes {
+                            expected: "nothing".to_string(),
+                            actual: format!("{else_result_type:?}"),
+                        })
+                    }
+                    (None, Some(None)) => BlockType::Empty,
+                    (None, None) => BlockType::Empty,
+                };
+                self.emit(&Instruction::If(block_type));
+                self.compile_block(then_body)?;
+                if let Some(else_body) = else_body {
+                    self.emit(&Instruction::Else);
+                    self.compile_block(else_body)?;
+                }
+                self.emit(&Instruction::End);
             }
         }
         Ok(())

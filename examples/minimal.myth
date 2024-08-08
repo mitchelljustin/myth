@@ -1,9 +1,12 @@
 
-fn add_ten(a i32) i32 {
-  a + 10;
-  10
+fn maybe_add_ten(a i32) i32 {
+  if a > 50 {
+    10
+  } else {
+    5
+  }
 }
 
 fn _start() i32 {
-  add_ten(99)
+  maybe_add_ten(12)
 }

@@ -32,14 +32,13 @@ pub enum Statement {
     BreakStmt(Ast<BreakStmt>),
     ContinueStmt(Ast<ContinueStmt>),
     ReturnStmt(Ast<ReturnStmt>),
-    IfStmt(Ast<IfStmt>),
     Expression(Ast<Expression>),
 }
 
 #[derive(Debug, Clone)]
-pub struct IfStmt {
+pub struct IfExpr {
     pub(crate) condition: Ast<Expression>,
-    pub(crate) if_body: Ast<Block>,
+    pub(crate) then_body: Ast<Block>,
     pub(crate) else_body: Option<Ast<Block>>,
 }
 
@@ -65,6 +64,7 @@ pub enum Expression {
     Call(Ast<Call>),
     Literal(Ast<Literal>),
     Path(Ast<Path>),
+    IfExpr(Ast<IfExpr>),
 }
 
 #[derive(Debug, Clone)]
