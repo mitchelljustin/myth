@@ -16,7 +16,7 @@ pub enum Item {
 pub struct FunctionDef {
     pub(crate) name: Ast<Ident>,
     pub(crate) params: Vec<Ast<ParamDecl>>,
-    pub(crate) return_type: Option<Ast<Type>>,
+    pub(crate) return_type: Ast<Type>,
     pub(crate) body: Ast<Block>,
 }
 
@@ -45,7 +45,7 @@ pub struct IfExpr {
 #[derive(Debug, Clone)]
 pub struct Assignment {
     pub(crate) target: Ast<Expression>,
-    pub(crate) ty: Ast<Path>,
+    pub(crate) ty: Ast<Type>,
     pub(crate) value: Ast<Expression>,
 }
 
@@ -63,7 +63,7 @@ pub enum Expression {
     BinaryExpr(Ast<BinaryExpr>),
     Call(Ast<Call>),
     Literal(Ast<Literal>),
-    Path(Ast<Path>),
+    VariableRef(Ast<VariableRef>),
     IfExpr(Ast<IfExpr>),
 }
 
@@ -75,10 +75,18 @@ pub enum Literal {
     Bool(bool),
 }
 
-pub type Type = Path;
+#[derive(Debug, Clone)]
+pub enum Type {
+    None,
+    Primitive(TypePrimitive),
+}
 
 #[derive(Debug, Clone)]
-pub struct Path(pub(crate) Vec<Ast<Ident>>);
+pub enum TypePrimitive {
+    I32,
+    I64,
+    F64,
+}
 
 #[derive(Debug, Clone)]
 pub struct Call {
@@ -131,6 +139,11 @@ impl fmt::Display for Operator {
 pub struct Block {
     pub(crate) statements: Vec<Ast<Statement>>,
     pub has_last_semi: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct VariableRef {
+    pub(crate) name: Ast<Ident>,
 }
 
 #[derive(Debug, Clone)]

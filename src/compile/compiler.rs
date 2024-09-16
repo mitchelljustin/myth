@@ -2,25 +2,24 @@ use std::collections::HashMap;
 
 use wasm_encoder::{
     BlockType, CodeSection, DataSection, Encode, ExportKind, ExportSection, Function,
-    FunctionSection, ImportSection, Instruction, Module, TypeSection, ValType,
+    FunctionSection, ImportSection, Instruction, MemorySection, MemoryType, Module, TypeSection,
+    ValType,
 };
 
 use crate::ast::{Ast, Expression, Literal, Operator, Statement};
-use crate::compile::analyzer;
+use crate::compile::analyzer::Analyzer;
+use crate::compile::util;
+use crate::compile::CallFrame;
 use crate::compile::Error::{
-    IfElseIncompatibleTypes, InvalidLValue, NoOperatorForValType, NoSuchFunction,
+    IfElseIncompatibleTypes, IllegalBinaryExpression, InvalidLValue, NoOperatorForValType,
+    NoSuchFunction,
 };
 use crate::{ast, compile};
 
 #[derive(Default)]
-struct CallFrame {
-    params: HashMap<String, u32>,
-    locals: HashMap<String, u32>,
-}
-
-#[derive(Default)]
 pub struct Compiler {
     code_buffer: Vec<u8>,
+    analyzer: Analyzer,
     func_name_to_index: HashMap<String, u32>,
     call_frame: CallFrame,
     import_section: ImportSection,
@@ -29,6 +28,7 @@ pub struct Compiler {
     function_section: FunctionSection,
     export_section: ExportSection,
     code_section: CodeSection,
+    strings: HashMap<String, u32>,
 }
 
 impl Compiler {
@@ -39,6 +39,7 @@ impl Compiler {
     }
 
     pub fn compile_library(&mut self, lib: Ast<ast::Library>) -> compile::Result {
+        self.analyzer.analyze_library(&lib);
         for item in lib.v.items {
             match *item.v {
                 ast::Item::FunctionDef(func_def) => {
@@ -60,18 +61,17 @@ impl Compiler {
         let mut local_type_counts = HashMap::<ValType, u32>::new();
         let mut locals = HashMap::<String, u32>::new();
         let func_body = func_def.v.body;
-        let assignments = analyzer::extract_assignments(&func_body);
+        let assignments = util::extract_assignments(&func_body);
         for (i, assn) in assignments.into_iter().enumerate() {
-            let val_type = analyzer::ty_to_valtype(&assn.v.ty);
+            let Some(val_type) = self.analyzer.ast_type_to_ty(&assn.v.ty).val_type() else {
+                continue;
+            };
             *local_type_counts.entry(val_type).or_default() += 1;
             let target = &assn.v.target;
-            let Expression::Path(path) = target.v.as_ref() else {
+            let Expression::VariableRef(var_ref) = target.v.as_ref() else {
                 continue;
             };
-            let [name] = path.v.0.as_slice() else {
-                continue;
-            };
-            locals.insert(name.v.0.clone(), (i + params.len()) as u32);
+            locals.insert(var_ref.v.name.v.0.clone(), (i + params.len()) as u32);
         }
         for (name, &index) in params.iter() {
             locals.insert(name.clone(), index);
@@ -83,17 +83,24 @@ impl Compiler {
             .v
             .params
             .iter()
-            .map(|param| analyzer::ty_to_valtype(&param.v.ty))
+            .filter_map(|param| self.analyzer.ast_type_to_ty(&param.v.ty).val_type())
             .collect();
-        let results = func_def.v.return_type.as_ref().map(analyzer::ty_to_valtype);
+        let results = self
+            .analyzer
+            .ast_type_to_ty(&func_def.v.return_type)
+            .val_type();
         self.type_section.function(param_types, results);
         self.function_section.function(func_index);
         self.export_section
             .export(func_name.as_str(), ExportKind::Func, func_index);
 
-        // Compile function code
-        self.func_name_to_index.insert(func_name, func_index);
-        self.call_frame = CallFrame { params, locals };
+        self.func_name_to_index
+            .insert(func_name.clone(), func_index);
+        self.call_frame = CallFrame {
+            func_name,
+            params,
+            locals,
+        };
         self.code_buffer.clear();
         self.compile_block(func_body)?;
         self.emit(&Instruction::End);
@@ -110,12 +117,23 @@ impl Compiler {
 
     pub fn finish(self) -> Module {
         let mut module = Module::new();
+        let mut memory = MemorySection::new();
+        memory.memory(MemoryType {
+            maximum: None,
+            minimum: 1,
+            memory64: false,
+            shared: false,
+            page_size_log2: None,
+        });
+
         module.section(&self.type_section);
         module.section(&self.import_section);
         module.section(&self.function_section);
+        module.section(&memory);
         module.section(&self.export_section);
         module.section(&self.code_section);
         module.section(&self.data_section);
+
         module
     }
 
@@ -140,16 +158,13 @@ impl Compiler {
         match *statement.v {
             Statement::Assignment(assn) => {
                 let target = assn.v.target;
-                let Expression::Path(path) = target.v.as_ref() else {
-                    return Err(InvalidLValue { expression: target });
-                };
-                let [name] = path.v.0.as_slice() else {
+                let Expression::VariableRef(var_ref) = target.v.as_ref() else {
                     return Err(InvalidLValue { expression: target });
                 };
                 let local_index = *self
                     .call_frame
                     .locals
-                    .get(name.v.0.as_str())
+                    .get(var_ref.v.name.v.0.as_str())
                     .expect("no such local");
 
                 self.compile_expression(assn.v.value)?;
@@ -169,22 +184,27 @@ impl Compiler {
     }
 
     fn compile_expression(&mut self, expression: Ast<Expression>) -> compile::Result {
+        let ty = self
+            .analyzer
+            .resolve_expr_type(&self.call_frame, &expression)?;
         match *expression.v {
             Expression::BinaryExpr(bin_expr) => {
+                let Some(val_ty) = ty.val_type() else {
+                    return Err(IllegalBinaryExpression {
+                        expression: bin_expr.clone(),
+                    });
+                };
                 self.compile_expression(bin_expr.v.lhs)?;
                 self.compile_expression(bin_expr.v.rhs)?;
-                self.compile_operator(ValType::I32, bin_expr.v.operator)?;
+                self.compile_operator(val_ty, bin_expr.v.operator)?;
             }
             Expression::Call(call) => {
                 for arg in call.v.args {
                     self.compile_expression(arg)?;
                 }
                 match *call.v.callee.v {
-                    Expression::Path(path) => {
-                        let [name] = path.v.0.as_slice() else {
-                            unimplemented!("path call");
-                        };
-                        let func_name = name.v.0.as_str();
+                    Expression::VariableRef(var_ref) => {
+                        let func_name = var_ref.v.name.v.0.as_str();
                         let Some(&func_index) = self.func_name_to_index.get(func_name) else {
                             return Err(NoSuchFunction {
                                 func_name: func_name.to_string(),
@@ -196,21 +216,24 @@ impl Compiler {
                 }
             }
             Expression::Literal(lit) => match *lit.v {
-                Literal::Integer(int) => {
-                    self.emit(&Instruction::I32Const(int as i32));
+                Literal::Integer(val) => {
+                    self.emit(&Instruction::I32Const(val as i32));
                 }
-                Literal::String(_) => todo!(),
-                Literal::Float(_) => todo!(),
-                Literal::Bool(_) => todo!(),
+                Literal::String(value) => {
+                    todo!()
+                }
+                Literal::Float(val) => {
+                    self.emit(&Instruction::F64Const(val));
+                }
+                Literal::Bool(val) => {
+                    self.emit(&Instruction::I32Const(if val { 1 } else { 0 }));
+                }
             },
-            Expression::Path(path) => {
-                let [name] = path.v.0.as_slice() else {
-                    unimplemented!();
-                };
+            Expression::VariableRef(var_ref) => {
                 let local_index = self
                     .call_frame
                     .locals
-                    .get(name.v.0.as_str())
+                    .get(var_ref.v.name.v.0.as_str())
                     .expect("cannot find local");
                 self.emit(&Instruction::LocalGet(*local_index));
             }
@@ -221,34 +244,27 @@ impl Compiler {
                     else_body,
                 } = *if_expr.v;
                 self.compile_expression(condition)?;
-                let then_body_result_type = analyzer::infer_block_result_type(&then_body);
-                let else_body_result_type =
-                    else_body.as_ref().map(analyzer::infer_block_result_type);
-                let block_type = match (then_body_result_type, else_body_result_type) {
-                    (Some(then_result_type), Some(Some(else_result_type))) => {
-                        if then_result_type != else_result_type {
-                            return Err(IfElseIncompatibleTypes {
-                                expected: format!("{then_body_result_type:?}"),
-                                actual: format!("{else_body_result_type:?}"),
-                            });
-                        }
-                        BlockType::Result(then_result_type)
-                    }
-                    (Some(then_result_type), Some(None)) => {
+                let then_result_type = self
+                    .analyzer
+                    .resolve_block_result_type(&self.call_frame, &then_body)?;
+                let else_body_result_type = else_body
+                    .as_ref()
+                    .map(|body| {
+                        self.analyzer
+                            .resolve_block_result_type(&self.call_frame, body)
+                    })
+                    .transpose()?;
+                if let Some(else_result_type) = else_body_result_type {
+                    if then_result_type != else_result_type {
                         return Err(IfElseIncompatibleTypes {
                             expected: format!("{then_result_type:?}"),
-                            actual: "nothing".to_string(),
-                        })
-                    }
-                    (Some(_), None) => BlockType::Empty,
-                    (None, Some(Some(else_result_type))) => {
-                        return Err(IfElseIncompatibleTypes {
-                            expected: "nothing".to_string(),
                             actual: format!("{else_result_type:?}"),
-                        })
+                        });
                     }
-                    (None, Some(None)) => BlockType::Empty,
-                    (None, None) => BlockType::Empty,
+                };
+                let block_type = match then_result_type.val_type() {
+                    None => BlockType::Empty,
+                    Some(ty) => BlockType::Result(ty),
                 };
                 self.emit(&Instruction::If(block_type));
                 self.compile_block(then_body)?;

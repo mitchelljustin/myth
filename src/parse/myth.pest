@@ -107,7 +107,7 @@ ArgumentList = {
 }
 
 LeafExpr = {
-  PathExpr |
+  VariableRef |
   LiteralExpr |
   GroupedExpr
 }
@@ -116,7 +116,12 @@ LiteralExpr = {
   StringLiteral |
   IntegerLiteral |
   FloatLiteral |
-  BooleanLiteral
+  BooleanLiteral |
+  UnitLiteral
+}
+
+VariableRef = {
+  identifier
 }
 
 StringLiteral = @{
@@ -135,11 +140,11 @@ BooleanLiteral = {
   True | False
 }
 
-GroupedExpr = { "(" ~ Expression ~ ")" }
-
-PathExpr = {
-  Path
+UnitLiteral = {
+  "(" ~ ")"
 }
+
+GroupedExpr = { "(" ~ Expression ~ ")" }
 
 ParamList = {
   ("(" ~ ")") |
@@ -150,18 +155,17 @@ ParamDecl = {
   identifier ~ Type
 }
 
-Type = _{
-  Path
+Type = {
+  TypePrimitive
 }
 
-Path = ${
-  PathSegment ~ ("::" ~ PathSegment)*
+TypePrimitive = {
+  TypeI32 | TypeI32 | TypeF64
 }
 
-PathSegment = {
-  identifier
-}
-
+TypeI32 = { "i32" }
+TypeI64 = { "i64" }
+TypeF64 = { "f64" }
 
 EqEq = { "==" }
 NotEq = { "!=" }

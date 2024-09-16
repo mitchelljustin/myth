@@ -6,6 +6,7 @@ use thiserror::Error;
 use TransformError::InvalidFloatLiteral;
 
 use crate::ast;
+use crate::ast::{TypePrimitive, VariableRef};
 use crate::parse::transform::TransformError::InvalidIntegerLiteral;
 use crate::parse::{Rule, Span};
 
@@ -69,9 +70,8 @@ pub fn transform_item(pair: Pair) -> TransformResult<ast::Item> {
                 .into_inner()
                 .map(transform_param_decl)
                 .collect::<Result<Vec<_>, _>>()?;
-            let return_type = return_type
-                .map(|return_type| transform_path(return_type))
-                .transpose()?;
+            let return_type =
+                return_type.map_or_else(|| create(&pair, ast::Type::None), transform_type)?;
             let body = transform_block(body)?;
             create(
                 &pair,
@@ -96,19 +96,9 @@ pub fn transform_param_decl(pair: Pair) -> TransformResult<ast::ParamDecl> {
         &pair,
         ast::ParamDecl {
             name: transform_ident(inner.next().expect("param name"))?,
-            ty: transform_path(inner.next().expect("param ty"))?,
+            ty: transform_type(inner.next().expect("param ty"))?,
         },
     )
-}
-
-pub fn transform_path(pair: Pair) -> TransformResult<ast::Path> {
-    debug_assert_matches!(pair.as_rule(), Rule::Path);
-    let components = pair
-        .clone()
-        .into_inner()
-        .map(transform_ident)
-        .collect::<Result<Vec<_>, _>>()?;
-    create(&pair, ast::Path(components))
 }
 
 pub fn transform_block(pair: Pair) -> TransformResult<ast::Block> {
@@ -139,7 +129,7 @@ pub fn transform_statement(pair: Pair) -> TransformResult<ast::Statement> {
         Rule::Assignment => {
             let [target, ty, value] = pair.clone().into_inner().next_chunk().unwrap();
             let target = transform_expression(target)?;
-            let ty = transform_path(ty)?;
+            let ty = transform_type(ty)?;
             let value = transform_expression(value)?;
             create(
                 &pair,
@@ -187,9 +177,12 @@ pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
         Rule::Expression | Rule::LeafExpr | Rule::GroupedExpr | Rule::LValue => {
             transform_expression(pair.into_inner().next().unwrap())
         }
-        Rule::PathExpr => {
-            let path = transform_path(pair.clone().into_inner().next().unwrap())?;
-            create(&pair, ast::Expression::Path(path))
+        Rule::VariableRef => {
+            let name = transform_ident(pair.clone().into_inner().next().unwrap())?;
+            create(
+                &pair,
+                ast::Expression::VariableRef(create(&pair, VariableRef { name })?),
+            )
         }
         Rule::LiteralExpr => {
             let literal = pair.clone().into_inner().next().unwrap();
@@ -279,6 +272,24 @@ pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
         }
         _ => unreachable!("transform_expression {rule:?}"),
     }
+}
+
+pub fn transform_type(pair: Pair) -> TransformResult<ast::Type> {
+    debug_assert_matches!(pair.as_rule(), Rule::Type);
+    let pair = pair.into_inner().next().unwrap();
+    let type_ast = match pair.as_rule() {
+        Rule::TypePrimitive => {
+            let primitive = match pair.clone().into_inner().next().unwrap().as_rule() {
+                Rule::TypeI32 => TypePrimitive::I32,
+                Rule::TypeI64 => TypePrimitive::I64,
+                Rule::TypeF64 => TypePrimitive::F64,
+                _ => unreachable!(),
+            };
+            ast::Type::Primitive(primitive)
+        }
+        rule => unreachable!("transform_type {rule:?}"),
+    };
+    create(&pair, type_ast)
 }
 
 pub fn transform_ident(pair: Pair) -> TransformResult<ast::Ident> {
