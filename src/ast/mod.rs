@@ -114,6 +114,7 @@ pub enum Operator {
     Rem,
     Add,
     Sub,
+    RangeExclusive,
 }
 
 impl fmt::Display for Operator {
@@ -130,6 +131,7 @@ impl fmt::Display for Operator {
             Operator::Rem => "%",
             Operator::Add => "+",
             Operator::Sub => "-",
+            Operator::RangeExclusive => "..<",
         };
         f.write_str(as_str)
     }

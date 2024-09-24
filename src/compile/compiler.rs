@@ -8,12 +8,11 @@ use wasm_encoder::{
 
 use crate::ast::{Ast, Expression, Literal, Operator, Statement};
 use crate::compile::analyzer::Analyzer;
-use crate::compile::util;
 use crate::compile::CallFrame;
 use crate::compile::Error::{
-    IfElseIncompatibleTypes, IllegalBinaryExpression, InvalidLValue, NoOperatorForValType,
-    NoSuchFunction,
+    IfElseIncompatibleTypes, InvalidLValue, NoOperatorForType, NoSuchFunction,
 };
+use crate::compile::util;
 use crate::{ast, compile};
 
 #[derive(Default)]
@@ -189,14 +188,9 @@ impl Compiler {
             .resolve_expr_type(&self.call_frame, &expression)?;
         match *expression.v {
             Expression::BinaryExpr(bin_expr) => {
-                let Some(val_ty) = ty.val_type() else {
-                    return Err(IllegalBinaryExpression {
-                        expression: bin_expr.clone(),
-                    });
-                };
                 self.compile_expression(bin_expr.v.lhs)?;
                 self.compile_expression(bin_expr.v.rhs)?;
-                self.compile_operator(val_ty, bin_expr.v.operator)?;
+                self.compile_operator_val_type(ty.val_type().unwrap(), bin_expr.v.operator)?;
             }
             Expression::Call(call) => {
                 for arg in call.v.args {
@@ -278,7 +272,11 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_operator(&mut self, val_type: ValType, operator: Operator) -> compile::Result {
+    fn compile_operator_val_type(
+        &mut self,
+        val_type: ValType,
+        operator: Operator,
+    ) -> compile::Result {
         let instruction = match (val_type, operator) {
             (ValType::I32, Operator::EqEq) => Instruction::I32Eq,
             (ValType::I32, Operator::NotEq) => Instruction::I32Ne,
@@ -313,7 +311,7 @@ impl Compiler {
             (ValType::F64, Operator::Add) => Instruction::F64Add,
             (ValType::F64, Operator::Sub) => Instruction::F64Sub,
             _ => {
-                return Err(NoOperatorForValType { operator, val_type });
+                return Err(NoOperatorForType { operator, val_type });
             }
         };
         self.emit(&instruction);

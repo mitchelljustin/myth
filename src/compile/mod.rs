@@ -5,6 +5,7 @@ use crate::ast;
 use crate::ast::{Ast, BinaryExpr};
 use compiler::Compiler;
 use std::collections::HashMap;
+use std::fmt;
 
 mod analyzer;
 mod compiler;
@@ -13,7 +14,7 @@ pub mod util;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("no operator '{operator}' for {val_type:?}")]
-    NoOperatorForValType {
+    NoOperatorForType {
         operator: ast::Operator,
         val_type: ValType,
     },
@@ -51,16 +52,17 @@ pub enum Ty {
     I64,
     F64,
     Bool,
+    Range,
 }
 
 impl Ty {
     pub fn val_type(&self) -> Option<ValType> {
         match self {
-            Ty::Unit => None,
             Ty::I32 => Some(ValType::I32),
             Ty::I64 => Some(ValType::I64),
             Ty::F64 => Some(ValType::F64),
             Ty::Bool => Some(ValType::I32),
+            _ => None,
         }
     }
 }
@@ -69,4 +71,8 @@ struct FunctionScope {
     params: Vec<(String, Ty)>,
     return_type: Ty,
     locals: HashMap<String, Ty>,
+}
+
+struct Swag<'a> {
+    swag: &'a dyn fmt::Write,
 }

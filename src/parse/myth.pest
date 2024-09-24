@@ -22,6 +22,7 @@ LastSemi = { ";" }
 
 Statement = {
   Assignment |
+  ForInStmt |
   BreakStmt |
   ContinueStmt |
   ReturnStmt |
@@ -48,6 +49,10 @@ Assignment = {
   ~ Type
   ~ "="
   ~ Expression
+}
+
+ForInStmt = {
+  "for" ~ VariableRef ~ "in" ~ Expression ~ Block
 }
 
 LValue = {
@@ -88,12 +93,21 @@ TermOperator = _{
 }
 
 FactorExpr = {
-  CallExpr
-  ~ (FactorOperator ~ CallExpr)*
+  RangeExpr
+  ~ (FactorOperator ~ RangeExpr)*
 }
 
 FactorOperator = _{
   Asterisk | Slash | Percent
+}
+
+RangeExpr = {
+  CallExpr
+  ~ (RangeOperator ~ CallExpr)*
+}
+
+RangeOperator = _{
+  DotDotLt
 }
 
 CallExpr = {
@@ -160,12 +174,13 @@ Type = {
 }
 
 TypePrimitive = {
-  TypeI32 | TypeI32 | TypeF64
+  TypeI32 | TypeI32 | TypeF64 | TypeRange
 }
 
 TypeI32 = { "i32" }
 TypeI64 = { "i64" }
 TypeF64 = { "f64" }
+TypeRange = { "range" }
 
 EqEq = { "==" }
 NotEq = { "!=" }
@@ -174,6 +189,7 @@ GreaterThan = { ">" }
 LessThanEq = { "<=" }
 GreaterThanEq = { ">=" }
 Asterisk = { "*" }
+DotDotLt = { "..<" }
 Slash = { "/" }
 Percent = { "%" }
 Plus = { "+" }
@@ -184,6 +200,7 @@ False = { "false" }
 keyword = {
   "fn" |
   "let" |
+  "for" | "in" |
   "if" | "else" |
   "or" | "and" |
   "break" | "continue" | "return" |

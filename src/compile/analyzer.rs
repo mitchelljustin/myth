@@ -1,4 +1,4 @@
-use crate::ast::{Type, TypePrimitive};
+use crate::ast::{Operator, Type, TypePrimitive};
 use crate::compile::{util, CallFrame, FunctionScope, Ty};
 use crate::{
     ast, ast::Ast, ast::Block, ast::Expression, ast::FunctionDef, ast::Literal, ast::Statement,
@@ -91,7 +91,10 @@ impl Analyzer {
 
     pub fn resolve_expr_type(&self, frame: &CallFrame, expr: &Ast<Expression>) -> TyResult {
         match expr.v.as_ref() {
-            Expression::BinaryExpr(bin_expr) => self.resolve_expr_type(frame, &bin_expr.v.lhs),
+            Expression::BinaryExpr(bin_expr) => match bin_expr.v.operator {
+                Operator::RangeExclusive => Ok(Ty::Range),
+                _ => self.resolve_expr_type(frame, &bin_expr.v.lhs),
+            },
             Expression::Call(call) => {
                 let Expression::VariableRef(var_ref) = call.v.callee.v.as_ref() else {
                     unimplemented!();

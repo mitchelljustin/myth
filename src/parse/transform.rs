@@ -167,6 +167,7 @@ pub fn transform_operator(pair: &Pair) -> ast::Operator {
         Rule::Percent => ast::Operator::Rem,
         Rule::Plus => ast::Operator::Add,
         Rule::Minus => ast::Operator::Sub,
+        Rule::DotDotLt => ast::Operator::RangeExclusive,
         rule => unreachable!("transform_operator {rule:?}"),
     }
 }
@@ -213,7 +214,12 @@ pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
                 };
             create(&pair, ast::Expression::Literal(create(&pair, inner)?))
         }
-        Rule::OrExpr | Rule::AndExpr | Rule::ComparisonExpr | Rule::FactorExpr | Rule::TermExpr => {
+        Rule::OrExpr
+        | Rule::AndExpr
+        | Rule::ComparisonExpr
+        | Rule::FactorExpr
+        | Rule::TermExpr
+        | Rule::RangeExpr => {
             let mut inner = pair.clone().into_inner();
             let mut lhs = transform_expression(inner.next().unwrap())?;
             for [op, rhs] in inner.array_chunks() {

@@ -5,8 +5,6 @@
 
 use std::error::Error;
 use std::fs;
-use std::fs::File;
-use std::io::Write;
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -22,6 +20,8 @@ struct Args {
     input_file: PathBuf,
     #[arg(short, long, default_value = "./out/out.wasm")]
     out_file: PathBuf,
+    #[arg(long, default_value = "./out/out.wat")]
+    wat_file: PathBuf,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -39,11 +39,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(parent) = args.out_file.parent() {
         fs::create_dir_all(parent)?;
     }
-    let mut out_file = File::options()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(args.out_file)?;
-    out_file.write_all(&module.finish())?;
+    let module_bytes = module.finish();
+    fs::write(args.out_file, &module_bytes)?;
+    let wat_text = wasmprinter::print_bytes(&module_bytes)?;
+    fs::write(args.wat_file, wat_text)?;
+
     Ok(())
 }
