@@ -1,0 +1,7 @@
+fn swag() i32 {
+    3
+}
+
+fn _start() i32 {
+    swag()
+}

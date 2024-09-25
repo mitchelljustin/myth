@@ -8,11 +8,11 @@ use wasm_encoder::{
 
 use crate::ast::{Ast, Expression, Literal, Operator, Statement};
 use crate::compile::analyzer::Analyzer;
+use crate::compile::util;
 use crate::compile::CallFrame;
 use crate::compile::Error::{
     IfElseIncompatibleTypes, InvalidLValue, NoOperatorForType, NoSuchFunction,
 };
-use crate::compile::util;
 use crate::{ast, compile};
 
 #[derive(Default)]
