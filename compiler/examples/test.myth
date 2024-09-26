@@ -1,7 +1,8 @@
 fn swag() i32 {
-    3
+  let i i32 = new(i32);
+  i
 }
 
 fn _start() i32 {
-    swag()
+  swag()
 }

@@ -1,5 +1,5 @@
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
 use std::alloc::{GlobalAlloc, Layout};
-use std::mem;
 
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
@@ -10,8 +10,8 @@ pub struct RefBox {
 }
 
 fn refbox_layout_for_data_size(data_size: usize) -> Layout {
-    let size = mem::size_of::<RefBox>() + data_size;
-    let align = mem::align_of::<usize>();
+    let size = size_of::<RefBox>() + data_size;
+    let align = align_of::<usize>();
     unsafe { Layout::from_size_align_unchecked(size, align) }
 }
 
@@ -42,6 +42,6 @@ pub fn dec_ref(refbox: *mut RefBox) {
 }
 
 #[no_mangle]
-pub unsafe fn get_data(refbox: *mut RefBox) -> *mut u8 {
-    (refbox as *mut u8).add(mem::size_of::<RefBox>())
+pub fn get_data(refbox: *mut RefBox) -> *mut u8 {
+    unsafe { (refbox as *mut u8).add(size_of::<RefBox>()) }
 }

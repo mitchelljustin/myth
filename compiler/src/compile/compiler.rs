@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use wasm_encoder::{
-    BlockType, CodeSection, DataSection, Encode, ExportKind, ExportSection, Function,
+    BlockType, CodeSection, DataSection, Encode, EntityType, ExportKind, ExportSection, Function,
     FunctionSection, ImportSection, Instruction, MemorySection, MemoryType, Module, TypeSection,
     ValType,
 };
@@ -19,6 +19,7 @@ use crate::{ast, compile};
 pub struct Compiler {
     code_buffer: Vec<u8>,
     analyzer: Analyzer,
+    func_index: u32,
     func_name_to_index: HashMap<String, u32>,
     call_frame: CallFrame,
     import_section: ImportSection,
@@ -30,11 +31,30 @@ pub struct Compiler {
     strings: HashMap<String, u32>,
 }
 
+const GC_NEW: u32 = 0;
+const GC_INC_REF: u32 = 1;
+const GC_DEC_REF: u32 = 2;
+const GC_GET_DATA: u32 = 3;
+
 impl Compiler {
     pub fn new() -> Self {
-        Self {
+        let mut compiler = Self {
             ..Default::default()
-        }
+        };
+        compiler.init();
+        compiler
+    }
+
+    fn init(&mut self) {
+        self.type_section.function([ValType::I32], [ValType::I32]);
+        self.type_section.function([ValType::I32], []);
+        self.type_section.function([ValType::I32], []);
+        self.type_section.function([ValType::I32], [ValType::I32]);
+        self.import_section
+            .import("gc", "new", EntityType::Function(GC_NEW))
+            .import("gc", "inc_ref", EntityType::Function(GC_INC_REF))
+            .import("gc", "dec_ref", EntityType::Function(GC_DEC_REF))
+            .import("gc", "get_data", EntityType::Function(GC_GET_DATA));
     }
 
     pub fn compile_library(&mut self, lib: Ast<ast::Library>) -> compile::Result {
@@ -76,7 +96,7 @@ impl Compiler {
             locals.insert(name.clone(), index);
         }
         // Set metadata
-        let func_index = self.function_section.len();
+        let func_index = self.import_section.len() + self.function_section.len();
         let func_name = func_def.v.name.v.0;
         let param_types: Vec<ValType> = func_def
             .v
@@ -267,6 +287,12 @@ impl Compiler {
                     self.compile_block(else_body)?;
                 }
                 self.emit(&Instruction::End);
+            }
+            Expression::New(new) => {
+                let ty = self.analyzer.ast_type_to_ty(&new.v.ty);
+                let size = ty.size();
+                self.emit(&Instruction::I32Const(size));
+                self.emit(&Instruction::Call(GC_NEW));
             }
         }
         Ok(())

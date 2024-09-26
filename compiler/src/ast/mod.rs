@@ -63,8 +63,14 @@ pub enum Expression {
     BinaryExpr(Ast<BinaryExpr>),
     Call(Ast<Call>),
     Literal(Ast<Literal>),
+    New(Ast<New>),
     VariableRef(Ast<VariableRef>),
     IfExpr(Ast<IfExpr>),
+}
+
+#[derive(Debug, Clone)]
+pub struct New {
+    pub(crate) ty: Ast<Type>,
 }
 
 #[derive(Debug, Clone)]

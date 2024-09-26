@@ -18,14 +18,11 @@ mod parse;
 struct Args {
     #[arg(short, long)]
     input_file: PathBuf,
-    #[arg(short, long, default_value = "./out/out.wasm")]
-    out_file: PathBuf,
-    #[arg(long, default_value = "./out/out.wat")]
-    wat_file: PathBuf,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
+    let module_name = args.input_file.to_string_lossy().replace(".myth", "");
     let source = fs::read_to_string(args.input_file)?;
     let lib = match parse::parse(source) {
         Err(parse::Error::PestParseFailed(err)) => {
@@ -36,13 +33,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         Ok(lib) => lib,
     };
     let module = compile::compile(lib)?;
-    if let Some(parent) = args.out_file.parent() {
+    let out_file: PathBuf = format!("./out/{module_name}.wasm").into();
+    let wat_file: PathBuf = format!("./out/{module_name}.wat").into();
+    if let Some(parent) = out_file.parent() {
         fs::create_dir_all(parent)?;
     }
-    let module_bytes = module.finish();
-    fs::write(args.out_file, &module_bytes)?;
-    let wat_text = wasmprinter::print_bytes(&module_bytes)?;
-    fs::write(args.wat_file, wat_text)?;
+    fs::write(out_file, &module)?;
+    let wat_text = wasmprinter::print_bytes(&module)?;
+    fs::write(wat_file, wat_text)?;
 
     Ok(())
 }

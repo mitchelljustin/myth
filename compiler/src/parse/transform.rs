@@ -242,6 +242,11 @@ pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
             }
             Ok(lhs)
         }
+        Rule::NewExpr => {
+            let ty = pair.clone().into_inner().next().unwrap();
+            let ty = transform_type(ty)?;
+            create(&pair, ast::Expression::New(create(&pair, ast::New { ty })?))
+        }
         Rule::CallExpr => {
             let mut inner = pair.clone().into_inner();
             let mut expr = transform_expression(inner.next().expect("callee"))?;

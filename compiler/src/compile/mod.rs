@@ -1,15 +1,17 @@
 use thiserror::Error;
-use wasm_encoder::{Module, ValType};
+use wasm_encoder::ValType;
 
 use crate::ast;
 use crate::ast::{Ast, BinaryExpr};
 use compiler::Compiler;
 use std::collections::HashMap;
 use std::fmt;
+use ty::Ty;
 
 mod analyzer;
 mod compiler;
 pub mod util;
+mod ty;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -32,10 +34,10 @@ pub enum Error {
 
 type Result<T = ()> = std::result::Result<T, Error>;
 
-pub fn compile(lib: Ast<ast::Library>) -> Result<Module> {
+pub fn compile(lib: Ast<ast::Library>) -> Result<Vec<u8>> {
     let mut compiler = Compiler::new();
     compiler.compile_library(lib)?;
-    Ok(compiler.finish())
+    Ok(compiler.finish().finish())
 }
 
 #[derive(Default)]
@@ -43,28 +45,6 @@ pub struct CallFrame {
     func_name: String,
     params: HashMap<String, u32>,
     locals: HashMap<String, u32>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum Ty {
-    Unit,
-    I32,
-    I64,
-    F64,
-    Bool,
-    Range,
-}
-
-impl Ty {
-    pub fn val_type(&self) -> Option<ValType> {
-        match self {
-            Ty::I32 => Some(ValType::I32),
-            Ty::I64 => Some(ValType::I64),
-            Ty::F64 => Some(ValType::F64),
-            Ty::Bool => Some(ValType::I32),
-            _ => None,
-        }
-    }
 }
 
 struct FunctionScope {

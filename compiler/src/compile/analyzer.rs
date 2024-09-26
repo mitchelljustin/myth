@@ -1,5 +1,6 @@
 use crate::ast::{Operator, Type, TypePrimitive};
-use crate::compile::{util, CallFrame, FunctionScope, Ty};
+use crate::compile::ty::Ty;
+use crate::compile::{util, CallFrame, FunctionScope};
 use crate::{
     ast, ast::Ast, ast::Block, ast::Expression, ast::FunctionDef, ast::Literal, ast::Statement,
     compile,
@@ -126,6 +127,7 @@ impl Analyzer {
             Expression::IfExpr(if_expr) => {
                 self.resolve_block_result_type(frame, &if_expr.v.then_body)
             }
+            Expression::New(new) => Ok(self.ast_type_to_ty(&new.v.ty)),
         }
     }
 }
