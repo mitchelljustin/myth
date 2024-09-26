@@ -2,8 +2,7 @@ use std::collections::HashMap;
 
 use wasm_encoder::{
     BlockType, CodeSection, DataSection, Encode, EntityType, ExportKind, ExportSection, Function,
-    FunctionSection, ImportSection, Instruction, MemorySection, MemoryType, Module, TypeSection,
-    ValType,
+    FunctionSection, ImportSection, Instruction, Module, TypeSection, ValType,
 };
 
 use crate::ast::{Ast, Expression, Literal, Operator, Statement};
@@ -14,6 +13,7 @@ use crate::compile::Error::{
     IfElseIncompatibleTypes, InvalidLValue, NoOperatorForType, NoSuchFunction,
 };
 use crate::{ast, compile};
+use crate::compile::ty::Ty;
 
 #[derive(Default)]
 pub struct Compiler {
@@ -35,6 +35,8 @@ const GC_NEW: u32 = 0;
 const GC_INC_REF: u32 = 1;
 const GC_DEC_REF: u32 = 2;
 const GC_GET_DATA: u32 = 3;
+const GC_I32_LOAD: u32 = 4;
+const GC_I32_STORE: u32 = 5;
 
 impl Compiler {
     pub fn new() -> Self {
@@ -46,15 +48,20 @@ impl Compiler {
     }
 
     fn init(&mut self) {
-        self.type_section.function([ValType::I32], [ValType::I32]);
-        self.type_section.function([ValType::I32], []);
-        self.type_section.function([ValType::I32], []);
-        self.type_section.function([ValType::I32], [ValType::I32]);
+        self.type_section
+            .function([ValType::I32], [ValType::I32])
+            .function([ValType::I32], [])
+            .function([ValType::I32], [])
+            .function([ValType::I32], [ValType::I32])
+            .function([ValType::I32, ValType::I32], [ValType::I32])
+            .function([ValType::I32, ValType::I32, ValType::I32], []);
         self.import_section
             .import("gc", "new", EntityType::Function(GC_NEW))
             .import("gc", "inc_ref", EntityType::Function(GC_INC_REF))
             .import("gc", "dec_ref", EntityType::Function(GC_DEC_REF))
-            .import("gc", "get_data", EntityType::Function(GC_GET_DATA));
+            .import("gc", "get_data", EntityType::Function(GC_GET_DATA))
+            .import("gc", "i32_load", EntityType::Function(GC_I32_LOAD))
+            .import("gc", "i32_store", EntityType::Function(GC_I32_STORE));
     }
 
     pub fn compile_library(&mut self, lib: Ast<ast::Library>) -> compile::Result {
@@ -136,19 +143,10 @@ impl Compiler {
 
     pub fn finish(self) -> Module {
         let mut module = Module::new();
-        let mut memory = MemorySection::new();
-        memory.memory(MemoryType {
-            maximum: None,
-            minimum: 1,
-            memory64: false,
-            shared: false,
-            page_size_log2: None,
-        });
 
         module.section(&self.type_section);
         module.section(&self.import_section);
         module.section(&self.function_section);
-        module.section(&memory);
         module.section(&self.export_section);
         module.section(&self.code_section);
         module.section(&self.data_section);
@@ -190,8 +188,9 @@ impl Compiler {
                 self.emit(&Instruction::LocalSet(local_index));
             }
             Statement::Expression(expr) => {
+                let ty = self.analyzer.resolve_expr_type(&self.call_frame, &expr)?;
                 self.compile_expression(expr)?;
-                if !keep_expr_result {
+                if !keep_expr_result && ty != Ty::Unit {
                     self.emit(&Instruction::Drop);
                 }
             }
@@ -219,12 +218,25 @@ impl Compiler {
                 match *call.v.callee.v {
                     Expression::VariableRef(var_ref) => {
                         let func_name = var_ref.v.name.v.0.as_str();
-                        let Some(&func_index) = self.func_name_to_index.get(func_name) else {
-                            return Err(NoSuchFunction {
-                                func_name: func_name.to_string(),
-                            });
-                        };
-                        self.emit(&Instruction::Call(func_index));
+                        match func_name {
+                            "get_i32" => {
+                                self.emit(&Instruction::I32Const(0));
+                                self.emit(&Instruction::Call(GC_I32_LOAD)) 
+                            },
+                            "set_i32" => {
+                                self.emit(&Instruction::I32Const(0));
+                                self.emit(&Instruction::Call(GC_I32_STORE)) 
+                            },
+                            _ => {
+                                let Some(&func_index) = self.func_name_to_index.get(func_name)
+                                else {
+                                    return Err(NoSuchFunction {
+                                        func_name: func_name.to_string(),
+                                    });
+                                };
+                                self.emit(&Instruction::Call(func_index));
+                            }
+                        }
                     }
                     expr => unimplemented!("call: {expr:?}"),
                 }

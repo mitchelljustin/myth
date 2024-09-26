@@ -4,5 +4,7 @@ fn swag() i32 {
 }
 
 fn _start() i32 {
-  swag()
+  let i i32 = swag();
+  set_i32(i, 20);
+  get_i32(i)
 }

@@ -24,6 +24,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         .ok_or("no _start function")?;
     let mut retval = [Val::I32(0); 1];
     func.call(&mut store, &[], &mut retval)?;
-    println!("{}", &retval[0].i32().unwrap());
+    println!("{}", retval[0].i32().unwrap());
     Ok(())
 }

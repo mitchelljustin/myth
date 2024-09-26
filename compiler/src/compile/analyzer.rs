@@ -1,5 +1,6 @@
 use crate::ast::{Operator, Type, TypePrimitive};
 use crate::compile::ty::Ty;
+use crate::compile::Error::NoSuchFunction;
 use crate::compile::{util, CallFrame, FunctionScope};
 use crate::{
     ast, ast::Ast, ast::Block, ast::Expression, ast::FunctionDef, ast::Literal, ast::Statement,
@@ -100,10 +101,19 @@ impl Analyzer {
                 let Expression::VariableRef(var_ref) = call.v.callee.v.as_ref() else {
                     unimplemented!();
                 };
-                let Some(function) = self.functions.get(var_ref.v.name.v.0.as_str()) else {
-                    todo!("need to add error here");
-                };
-                Ok(function.return_type.clone())
+                let func_name = var_ref.v.name.v.0.as_str();
+                match func_name {
+                    "get_i32" => Ok(Ty::I32),
+                    "set_i32" => Ok(Ty::Unit),
+                    _ => {
+                        let Some(function) = self.functions.get(func_name) else {
+                            return Err(NoSuchFunction {
+                                func_name: func_name.to_string(),
+                            });
+                        };
+                        Ok(function.return_type.clone())
+                    }
+                }
             }
             Expression::Literal(lit) => Ok(match lit.v.as_ref() {
                 Literal::String(_) => todo!(),
