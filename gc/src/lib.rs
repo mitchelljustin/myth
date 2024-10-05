@@ -7,6 +7,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 pub struct RefBox {
     strong: usize,
     data_size: usize,
+    // arbitrary data here
 }
 
 impl RefBox {
@@ -20,8 +21,8 @@ impl RefBox {
         Self::layout_for_data_size(self.data_size)
     }
 
-    fn data_ptr(ref_box: *mut RefBox) -> *mut u8 {
-        unsafe { ref_box.add(1) as *mut u8 }
+    fn data_ptr(refbox: *mut RefBox) -> *mut u8 {
+        unsafe { refbox.add(1) as *mut u8 }
     }
 }
 
@@ -53,7 +54,7 @@ pub fn dec_ref(refbox: *mut RefBox) {
 
 #[no_mangle]
 pub fn get_data(refbox: *mut RefBox) -> *mut u8 {
-    unsafe { (refbox as *mut u8).add(size_of::<RefBox>()) }
+    RefBox::data_ptr(refbox)
 }
 
 #[no_mangle]

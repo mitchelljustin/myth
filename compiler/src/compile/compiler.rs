@@ -7,13 +7,13 @@ use wasm_encoder::{
 
 use crate::ast::{Ast, Expression, Literal, Operator, Statement};
 use crate::compile::analyzer::Analyzer;
+use crate::compile::ty::Ty;
 use crate::compile::util;
 use crate::compile::CallFrame;
 use crate::compile::Error::{
     IfElseIncompatibleTypes, InvalidLValue, NoOperatorForType, NoSuchFunction,
 };
 use crate::{ast, compile};
-use crate::compile::ty::Ty;
 
 #[derive(Default)]
 pub struct Compiler {
@@ -221,12 +221,12 @@ impl Compiler {
                         match func_name {
                             "get_i32" => {
                                 self.emit(&Instruction::I32Const(0));
-                                self.emit(&Instruction::Call(GC_I32_LOAD)) 
-                            },
+                                self.emit(&Instruction::Call(GC_I32_LOAD))
+                            }
                             "set_i32" => {
                                 self.emit(&Instruction::I32Const(0));
-                                self.emit(&Instruction::Call(GC_I32_STORE)) 
-                            },
+                                self.emit(&Instruction::Call(GC_I32_STORE))
+                            }
                             _ => {
                                 let Some(&func_index) = self.func_name_to_index.get(func_name)
                                 else {
