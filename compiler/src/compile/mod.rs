@@ -2,7 +2,7 @@ use thiserror::Error;
 use wasm_encoder::ValType;
 
 use crate::ast;
-use crate::ast::{Ast, BinaryExpr};
+use crate::ast::{Ast, Binary};
 use compiler::Compiler;
 use std::collections::HashMap;
 use std::fmt;
@@ -10,8 +10,8 @@ use ty::Ty;
 
 mod analyzer;
 mod compiler;
-pub mod util;
 mod ty;
+pub mod util;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -27,9 +27,11 @@ pub enum Error {
     #[error("`if` and `else` have incompatible types: expected {expected}, found {actual}")]
     IfElseIncompatibleTypes { expected: String, actual: String },
     #[error("illegal binary expression: '{expression:?}'")]
-    IllegalBinaryExpression { expression: Ast<BinaryExpr> },
+    IllegalBinaryExpression { expression: Ast<Binary> },
     #[error("no such variable: '{variable:?}''")]
     NoSuchVariable { variable: String },
+    #[error("illegal deref: {ty}")]
+    IllegalDeref { ty: Ty },
 }
 
 type Result<T = ()> = std::result::Result<T, Error>;

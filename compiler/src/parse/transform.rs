@@ -6,8 +6,8 @@ use thiserror::Error;
 use TransformError::InvalidFloatLiteral;
 
 use crate::ast;
-use crate::ast::{TypePrimitive, VariableRef};
-use crate::parse::transform::TransformError::InvalidIntegerLiteral;
+use crate::ast::Operator;
+use crate::parse::transform::TransformError::{InvalidIntegerLiteral, InvalidLvalue};
 use crate::parse::{Rule, Span};
 
 #[derive(Error, Debug)]
@@ -16,6 +16,8 @@ pub enum TransformError {
     InvalidIntegerLiteral(String, ParseIntError),
     #[error("invalid float literal '{0}': {1}")]
     InvalidFloatLiteral(String, ParseFloatError),
+    #[error("invalid lvalue: '{0}'")]
+    InvalidLvalue(String),
 }
 
 type TransformResult<T> = Result<ast::Ast<T>, TransformError>;
@@ -126,15 +128,50 @@ pub fn transform_statement(pair: Pair) -> TransformResult<ast::Statement> {
     let pair = pair.into_inner().next().expect("statement");
     let rule = pair.as_rule();
     match rule {
-        Rule::Assignment => {
-            let [target, ty, value] = pair.clone().into_inner().next_chunk().unwrap();
-            let target = transform_expression(target)?;
+        Rule::VariableDecl => {
+            let [name, ty, init_value] = pair.clone().into_inner().next_chunk().unwrap();
+            let name = transform_ident(name)?;
             let ty = transform_type(ty)?;
-            let value = transform_expression(value)?;
+            let init_value = transform_expression(init_value)?;
             create(
                 &pair,
-                ast::Statement::Assignment(create(&pair, ast::Assignment { value, target, ty })?),
+                ast::Statement::VariableDecl(create(
+                    &pair,
+                    ast::VariableDecl {
+                        init_value,
+                        name,
+                        ty,
+                    },
+                )?),
             )
+        }
+        Rule::Assignment => {
+            let [lvalue, value] = pair.clone().into_inner().next_chunk().unwrap();
+            debug_assert_eq!(lvalue.as_rule(), Rule::LValue);
+            let lvalue = lvalue.into_inner().next().unwrap();
+            let target = create(&lvalue, match lvalue.as_rule() {
+                Rule::VariableRef => {
+                    ast::LValue::VariableRef(create(&lvalue, ast::VariableRef {
+                        name: transform_ident(lvalue.clone())?,
+                    })?)
+                }
+                Rule::DerefExpr => {
+                    let lvalue_expr = transform_expression(lvalue.clone())?;
+                    let ast::Expression::Unary(unary) = *lvalue_expr.v else {
+                        return Err(InvalidLvalue(lvalue.as_str().to_string()));
+                    };
+                    if unary.v.operator != Operator::Deref {
+                        return Err(InvalidLvalue(lvalue.as_str().to_string()));
+                    };
+                    ast::LValue::Deref(unary.v.target)
+                }
+                rule => unreachable!("{rule:?}"),
+            })?;
+            let value = transform_expression(value)?;
+            create(&pair, ast::Statement::Assignment(create(&pair, ast::Assignment {
+                target,
+                value,
+            })?))
         }
         Rule::BreakStmt => {
             unimplemented!()
@@ -182,7 +219,7 @@ pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
             let name = transform_ident(pair.clone().into_inner().next().unwrap())?;
             create(
                 &pair,
-                ast::Expression::VariableRef(create(&pair, VariableRef { name })?),
+                ast::Expression::VariableRef(create(&pair, ast::VariableRef { name })?),
             )
         }
         Rule::LiteralExpr => {
@@ -225,7 +262,7 @@ pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
             for [op, rhs] in inner.array_chunks() {
                 let operator = transform_operator(&op);
                 let rhs = transform_expression(rhs)?;
-                let bin_expr = ast::Ast::<ast::BinaryExpr> {
+                let bin_expr = ast::Ast::<ast::Binary> {
                     span: Span {
                         rule,
                         line_col: lhs.span.line_col,
@@ -236,9 +273,9 @@ pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
                             &rhs.span.source
                         ),
                     },
-                    v: Box::new(ast::BinaryExpr { lhs, rhs, operator }),
+                    v: Box::new(ast::Binary { lhs, rhs, operator }),
                 };
-                lhs = create(&pair, ast::Expression::BinaryExpr(bin_expr))?;
+                lhs = create(&pair, ast::Expression::Binary(bin_expr))?;
             }
             Ok(lhs)
         }
@@ -246,6 +283,23 @@ pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
             let ty = pair.clone().into_inner().next().unwrap();
             let ty = transform_type(ty)?;
             create(&pair, ast::Expression::New(create(&pair, ast::New { ty })?))
+        }
+        Rule::DerefExpr => {
+            let mut iter = pair.clone().into_inner().rev();
+            let mut expr = transform_expression(iter.next().unwrap())?;
+            for _ in iter {
+                expr = create(
+                    &pair,
+                    ast::Expression::Unary(create(
+                        &pair,
+                        ast::Unary {
+                            target: expr,
+                            operator: ast::Operator::Deref,
+                        },
+                    )?),
+                )?;
+            }
+            Ok(expr)
         }
         Rule::CallExpr => {
             let mut inner = pair.clone().into_inner();
@@ -271,9 +325,9 @@ pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
             let else_body = else_body.map(transform_block).transpose()?;
             create(
                 &pair,
-                ast::Expression::IfExpr(create(
+                ast::Expression::If(create(
                     &pair,
-                    ast::IfExpr {
+                    ast::If {
                         condition,
                         then_body,
                         else_body,
@@ -291,12 +345,18 @@ pub fn transform_type(pair: Pair) -> TransformResult<ast::Type> {
     let type_ast = match pair.as_rule() {
         Rule::TypePrimitive => {
             let primitive = match pair.clone().into_inner().next().unwrap().as_rule() {
-                Rule::TypeI32 => TypePrimitive::I32,
-                Rule::TypeI64 => TypePrimitive::I64,
-                Rule::TypeF64 => TypePrimitive::F64,
+                Rule::TypeI32 => ast::TypePrimitive::I32,
+                Rule::TypeI64 => ast::TypePrimitive::I64,
+                Rule::TypeF64 => ast::TypePrimitive::F64,
+                Rule::TypeRange => ast::TypePrimitive::Range,
+                Rule::TypeString => ast::TypePrimitive::String,
                 _ => unreachable!(),
             };
             ast::Type::Primitive(primitive)
+        }
+        Rule::TypePointer => {
+            let inner = transform_type(pair.clone().into_inner().next().unwrap())?;
+            ast::Type::Pointer(inner)
         }
         rule => unreachable!("transform_type {rule:?}"),
     };

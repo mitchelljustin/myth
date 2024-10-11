@@ -44,14 +44,14 @@ impl Analyzer {
                 )
             })
             .collect();
-        let assignments = util::extract_assignments(&func_def.v.body);
-        let mut locals: HashMap<String, Ty> = assignments
+        let var_decls = util::extract_variable_decls(&func_def.v.body);
+        let mut locals: HashMap<String, Ty> = var_decls
             .into_iter()
-            .filter_map(|assn| {
-                let Expression::VariableRef(var_ref) = assn.v.target.v.as_ref() else {
-                    return None;
-                };
-                Some((var_ref.v.name.v.0.clone(), self.ast_type_to_ty(&assn.v.ty)))
+            .map(|var_decl| {
+                (
+                    var_decl.v.name.v.0.clone(),
+                    self.ast_type_to_ty(&var_decl.v.ty),
+                )
             })
             .collect();
         for (name, ty) in &params {
@@ -74,7 +74,10 @@ impl Analyzer {
                 TypePrimitive::I32 => Ty::I32,
                 TypePrimitive::I64 => Ty::I64,
                 TypePrimitive::F64 => Ty::F64,
+                TypePrimitive::Range => Ty::Range,
+                TypePrimitive::String => Ty::String,
             },
+            Type::Pointer(inner) => Ty::Pointer(Box::new(self.ast_type_to_ty(inner))),
         }
     }
 
@@ -93,7 +96,17 @@ impl Analyzer {
 
     pub fn resolve_expr_type(&self, frame: &CallFrame, expr: &Ast<Expression>) -> TyResult {
         match expr.v.as_ref() {
-            Expression::BinaryExpr(bin_expr) => match bin_expr.v.operator {
+            Expression::Unary(unary) => match unary.v.operator {
+                Operator::Deref => {
+                    let ty = self.resolve_expr_type(frame, &unary.v.target)?;
+                    let Ty::Pointer(inner) = ty else {
+                        return Err(compile::Error::IllegalDeref { ty });
+                    };
+                    Ok(*inner)
+                }
+                _ => unreachable!(),
+            },
+            Expression::Binary(bin_expr) => match bin_expr.v.operator {
                 Operator::RangeExclusive => Ok(Ty::Range),
                 _ => self.resolve_expr_type(frame, &bin_expr.v.lhs),
             },
@@ -102,21 +115,15 @@ impl Analyzer {
                     unimplemented!();
                 };
                 let func_name = var_ref.v.name.v.0.as_str();
-                match func_name {
-                    "get_i32" => Ok(Ty::I32),
-                    "set_i32" => Ok(Ty::Unit),
-                    _ => {
-                        let Some(function) = self.functions.get(func_name) else {
-                            return Err(NoSuchFunction {
-                                func_name: func_name.to_string(),
-                            });
-                        };
-                        Ok(function.return_type.clone())
-                    }
-                }
+                let Some(function) = self.functions.get(func_name) else {
+                    return Err(NoSuchFunction {
+                        func_name: func_name.to_string(),
+                    });
+                };
+                Ok(function.return_type.clone())
             }
             Expression::Literal(lit) => Ok(match lit.v.as_ref() {
-                Literal::String(_) => todo!(),
+                Literal::String(_) => Ty::String,
                 Literal::Integer(_) => Ty::I32,
                 Literal::Float(_) => Ty::F64,
                 Literal::Bool(_) => Ty::Bool,
@@ -134,9 +141,7 @@ impl Analyzer {
                     variable: name.clone(),
                 })
             }
-            Expression::IfExpr(if_expr) => {
-                self.resolve_block_result_type(frame, &if_expr.v.then_body)
-            }
+            Expression::If(if_expr) => self.resolve_block_result_type(frame, &if_expr.v.then_body),
             Expression::New(new) => Ok(self.ast_type_to_ty(&new.v.ty)),
         }
     }

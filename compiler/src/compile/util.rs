@@ -1,16 +1,13 @@
-use crate::ast::{Assignment, Ast, Block, Statement};
+use crate::ast::{Ast, Block, Statement, VariableDecl};
 
-pub fn extract_assignments(block: &Ast<Block>) -> Vec<&Ast<Assignment>> {
+pub fn extract_variable_decls(block: &Ast<Block>) -> Vec<&Ast<VariableDecl>> {
     block
         .v
         .statements
         .iter()
-        .filter_map(|stmt| {
-            if let Statement::Assignment(assn) = stmt.v.as_ref() {
-                Some(assn)
-            } else {
-                None
-            }
+        .filter_map(|stmt| match stmt.v.as_ref() {
+            Statement::VariableDecl(decl) => Some(decl),
+            _ => None,
         })
         .collect()
 }

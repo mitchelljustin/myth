@@ -1,13 +1,12 @@
-fn swag() i32 {
-  let i i32 = new(i32);
-  i
+
+fn add_one(x &i32) {
+  *x = *x + 1;
 }
 
+
 fn _start() i32 {
-  let i i32 = swag();
-  set_i32(i, 20);
-  let ival i32 = get_i32(i);
-  let ival2 i32 = ival + 30;
-  set_i32(i, ival2);
-  get_i32(i)
+  let i &i32 = new(i32);
+  add_one(i);
+  add_one(i);
+  *i
 }

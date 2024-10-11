@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 
 use wasm_encoder::{
-    BlockType, CodeSection, DataSection, Encode, EntityType, ExportKind, ExportSection, Function,
+    BlockType, CodeSection, ConstExpr, DataSection, Encode, ExportKind, ExportSection, Function,
     FunctionSection, ImportSection, Instruction, Module, TypeSection, ValType,
 };
 
-use crate::ast::{Ast, Expression, Literal, Operator, Statement};
+use crate::ast::{Ast, Expression, LValue, Literal, Operator, Statement};
 use crate::compile::analyzer::Analyzer;
 use crate::compile::ty::Ty;
 use crate::compile::util;
 use crate::compile::CallFrame;
 use crate::compile::Error::{
-    IfElseIncompatibleTypes, InvalidLValue, NoOperatorForType, NoSuchFunction,
+    IfElseIncompatibleTypes, IllegalDeref, NoOperatorForType, NoSuchFunction, NoSuchVariable,
 };
 use crate::{ast, compile};
 
@@ -19,7 +19,6 @@ use crate::{ast, compile};
 pub struct Compiler {
     code_buffer: Vec<u8>,
     analyzer: Analyzer,
-    func_index: u32,
     func_name_to_index: HashMap<String, u32>,
     call_frame: CallFrame,
     import_section: ImportSection,
@@ -29,14 +28,9 @@ pub struct Compiler {
     export_section: ExportSection,
     code_section: CodeSection,
     strings: HashMap<String, u32>,
+    data_index: u32,
+    data_offset: u32,
 }
-
-const GC_NEW: u32 = 0;
-const GC_INC_REF: u32 = 1;
-const GC_DEC_REF: u32 = 2;
-const GC_GET_DATA: u32 = 3;
-const GC_I32_LOAD: u32 = 4;
-const GC_I32_STORE: u32 = 5;
 
 impl Compiler {
     pub fn new() -> Self {
@@ -48,20 +42,7 @@ impl Compiler {
     }
 
     fn init(&mut self) {
-        self.type_section
-            .function([ValType::I32], [ValType::I32])
-            .function([ValType::I32], [])
-            .function([ValType::I32], [])
-            .function([ValType::I32], [ValType::I32])
-            .function([ValType::I32, ValType::I32], [ValType::I32])
-            .function([ValType::I32, ValType::I32, ValType::I32], []);
-        self.import_section
-            .import("gc", "new", EntityType::Function(GC_NEW))
-            .import("gc", "inc_ref", EntityType::Function(GC_INC_REF))
-            .import("gc", "dec_ref", EntityType::Function(GC_DEC_REF))
-            .import("gc", "get_data", EntityType::Function(GC_GET_DATA))
-            .import("gc", "i32_load", EntityType::Function(GC_I32_LOAD))
-            .import("gc", "i32_store", EntityType::Function(GC_I32_STORE));
+        Ty::install(&mut self.type_section);
     }
 
     pub fn compile_library(&mut self, lib: Ast<ast::Library>) -> compile::Result {
@@ -87,23 +68,20 @@ impl Compiler {
         let mut local_type_counts = HashMap::<ValType, u32>::new();
         let mut locals = HashMap::<String, u32>::new();
         let func_body = func_def.v.body;
-        let assignments = util::extract_assignments(&func_body);
-        for (i, assn) in assignments.into_iter().enumerate() {
-            let Some(val_type) = self.analyzer.ast_type_to_ty(&assn.v.ty).val_type() else {
+        let assignments = util::extract_variable_decls(&func_body);
+        for (i, decl) in assignments.into_iter().enumerate() {
+            let Some(val_type) = self.analyzer.ast_type_to_ty(&decl.v.ty).val_type() else {
                 continue;
             };
             *local_type_counts.entry(val_type).or_default() += 1;
-            let target = &assn.v.target;
-            let Expression::VariableRef(var_ref) = target.v.as_ref() else {
-                continue;
-            };
-            locals.insert(var_ref.v.name.v.0.clone(), (i + params.len()) as u32);
+            locals.insert(decl.v.name.v.0.clone(), (i + params.len()) as u32);
         }
         for (name, &index) in params.iter() {
             locals.insert(name.clone(), index);
         }
         // Set metadata
-        let func_index = self.import_section.len() + self.function_section.len();
+        let func_type_idx = self.type_section.len();
+        let func_idx = self.function_section.len();
         let func_name = func_def.v.name.v.0;
         let param_types: Vec<ValType> = func_def
             .v
@@ -116,12 +94,11 @@ impl Compiler {
             .ast_type_to_ty(&func_def.v.return_type)
             .val_type();
         self.type_section.function(param_types, results);
-        self.function_section.function(func_index);
+        self.function_section.function(func_type_idx);
         self.export_section
-            .export(func_name.as_str(), ExportKind::Func, func_index);
+            .export(func_name.as_str(), ExportKind::Func, func_idx);
 
-        self.func_name_to_index
-            .insert(func_name.clone(), func_index);
+        self.func_name_to_index.insert(func_name.clone(), func_idx);
         self.call_frame = CallFrame {
             func_name,
             params,
@@ -157,11 +134,7 @@ impl Compiler {
     fn compile_block(&mut self, block: Ast<ast::Block>) -> compile::Result {
         let statement_count = block.v.statements.len();
         for (i, stmt) in block.v.statements.into_iter().enumerate() {
-            let keep_expr_result = if i == statement_count - 1 {
-                !block.v.has_last_semi
-            } else {
-                false
-            };
+            let keep_expr_result = i == statement_count - 1 && !block.v.has_last_semi;
             self.compile_statement(stmt, keep_expr_result)?;
         }
         Ok(())
@@ -173,18 +146,16 @@ impl Compiler {
         keep_expr_result: bool,
     ) -> compile::Result {
         match *statement.v {
-            Statement::Assignment(assn) => {
-                let target = assn.v.target;
-                let Expression::VariableRef(var_ref) = target.v.as_ref() else {
-                    return Err(InvalidLValue { expression: target });
-                };
+            Statement::VariableDecl(decl) => {
+                let target = decl.v.name;
+                let value = decl.v.init_value;
                 let local_index = *self
                     .call_frame
                     .locals
-                    .get(var_ref.v.name.v.0.as_str())
+                    .get(target.v.0.as_str())
                     .expect("no such local");
 
-                self.compile_expression(assn.v.value)?;
+                self.compile_expression(value)?;
                 self.emit(&Instruction::LocalSet(local_index));
             }
             Statement::Expression(expr) => {
@@ -196,7 +167,39 @@ impl Compiler {
             }
             Statement::BreakStmt(_) => todo!(),
             Statement::ContinueStmt(_) => todo!(),
-            Statement::ReturnStmt(_) => todo!(),
+            Statement::ReturnStmt(ret) => {
+                if let Some(expr) = ret.v.retval {
+                    self.compile_expression(expr)?;
+                }
+                self.emit(&Instruction::Return);
+            }
+            Statement::Assignment(assn) => match *assn.v.target.v {
+                LValue::VariableRef(var_ref) => {
+                    let local_idx =
+                        *self
+                            .call_frame
+                            .locals
+                            .get(&var_ref.v.name.v.0)
+                            .ok_or_else(|| NoSuchVariable {
+                                variable: var_ref.v.name.v.0.clone(),
+                            })?;
+                    self.compile_expression(assn.v.value)?;
+                    self.emit(&Instruction::LocalSet(local_idx));
+                }
+                LValue::Deref(target) => {
+                    let ty = self.analyzer.resolve_expr_type(&self.call_frame, &target)?;
+                    let Ty::Pointer(inner) = ty else {
+                        return Err(IllegalDeref { ty });
+                    };
+                    let struct_type_index = inner.struct_type_idx();
+                    self.compile_expression(target)?;
+                    self.compile_expression(assn.v.value)?;
+                    self.emit(&Instruction::StructSet {
+                        struct_type_index,
+                        field_index: 0,
+                    });
+                }
+            },
         }
         Ok(())
     }
@@ -206,7 +209,7 @@ impl Compiler {
             .analyzer
             .resolve_expr_type(&self.call_frame, &expression)?;
         match *expression.v {
-            Expression::BinaryExpr(bin_expr) => {
+            Expression::Binary(bin_expr) => {
                 self.compile_expression(bin_expr.v.lhs)?;
                 self.compile_expression(bin_expr.v.rhs)?;
                 self.compile_operator_val_type(ty.val_type().unwrap(), bin_expr.v.operator)?;
@@ -218,25 +221,12 @@ impl Compiler {
                 match *call.v.callee.v {
                     Expression::VariableRef(var_ref) => {
                         let func_name = var_ref.v.name.v.0.as_str();
-                        match func_name {
-                            "get_i32" => {
-                                self.emit(&Instruction::I32Const(0));
-                                self.emit(&Instruction::Call(GC_I32_LOAD))
-                            }
-                            "set_i32" => {
-                                self.emit(&Instruction::I32Const(0));
-                                self.emit(&Instruction::Call(GC_I32_STORE))
-                            }
-                            _ => {
-                                let Some(&func_index) = self.func_name_to_index.get(func_name)
-                                else {
-                                    return Err(NoSuchFunction {
-                                        func_name: func_name.to_string(),
-                                    });
-                                };
-                                self.emit(&Instruction::Call(func_index));
-                            }
-                        }
+                        let Some(&func_index) = self.func_name_to_index.get(func_name) else {
+                            return Err(NoSuchFunction {
+                                func_name: func_name.to_string(),
+                            });
+                        };
+                        self.emit(&Instruction::Call(func_index));
                     }
                     expr => unimplemented!("call: {expr:?}"),
                 }
@@ -246,7 +236,14 @@ impl Compiler {
                     self.emit(&Instruction::I32Const(val as i32));
                 }
                 Literal::String(value) => {
-                    todo!()
+                    let len = value.len();
+                    self.data_section.active(
+                        self.data_index,
+                        &ConstExpr::i32_const(self.data_offset as i32),
+                        value.bytes(),
+                    );
+                    self.data_index += 1;
+                    self.data_offset += len as u32;
                 }
                 Literal::Float(val) => {
                     self.emit(&Instruction::F64Const(val));
@@ -263,8 +260,8 @@ impl Compiler {
                     .expect("cannot find local");
                 self.emit(&Instruction::LocalGet(*local_index));
             }
-            Expression::IfExpr(if_expr) => {
-                let ast::IfExpr {
+            Expression::If(if_expr) => {
+                let ast::If {
                     condition,
                     then_body,
                     else_body,
@@ -302,9 +299,22 @@ impl Compiler {
             }
             Expression::New(new) => {
                 let ty = self.analyzer.ast_type_to_ty(&new.v.ty);
-                let size = ty.size();
-                self.emit(&Instruction::I32Const(size));
-                self.emit(&Instruction::Call(GC_NEW));
+                let type_idx = ty.struct_type_idx();
+                self.emit(&Instruction::StructNewDefault(type_idx));
+            }
+            Expression::Unary(unary) => {
+                debug_assert!(unary.v.operator == Operator::Deref);
+                let expr = unary.v.target;
+                let ty = self.analyzer.resolve_expr_type(&self.call_frame, &expr)?;
+                self.compile_expression(expr)?;
+                let Ty::Pointer(inner) = ty else {
+                    return Err(IllegalDeref { ty });
+                };
+                let struct_type_index = inner.struct_type_idx();
+                self.emit(&Instruction::StructGet {
+                    struct_type_index,
+                    field_index: 0,
+                });
             }
         }
         Ok(())

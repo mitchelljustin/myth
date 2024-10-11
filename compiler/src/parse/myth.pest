@@ -3,215 +3,223 @@ Library = { SOI ~ Item* ~ EOI }
 Item = { FunctionDef }
 
 FunctionDef = {
-  "fn"
-  ~ identifier
-  ~ ParamList
-  ~ Type?
-  ~ Block
+    "fn" ~ identifier ~ ParamList ~ Type? ~ Block
 }
 
 Block = {
-  "{" ~ StatementList ~ "}"
+    "{" ~ StatementList ~ "}"
 }
 
 StatementList = {
-  Statement ~ (";" ~ Statement)* ~ LastSemi?
+    Statement ~ (";" ~ Statement)* ~ LastSemi?
 }
 
 LastSemi = { ";" }
 
 Statement = {
-  Assignment |
-  ForInStmt |
-  BreakStmt |
-  ContinueStmt |
-  ReturnStmt |
-  Expression
+    VariableDecl
+  | Assignment
+  | ForInStmt
+  | BreakStmt
+  | ContinueStmt
+  | ReturnStmt
+  | Expression
 }
 
 IfExpr = {
-  "if"
-  ~ Expression
-  ~ Block
-  ~ (
-    "else"
-    ~ Block
-  )?
+    "if" ~ Expression ~ Block ~ ("else" ~ Block)?
 }
 
-BreakStmt = { "break" }
+BreakStmt    = { "break" }
 ContinueStmt = { "continue" }
-ReturnStmt = { "return" ~ Expression? }
+ReturnStmt   = { "return" ~ Expression? }
 
-Assignment = {
-  "let"
-  ~ LValue
-  ~ Type
-  ~ "="
-  ~ Expression
+Assignment   = { LValue ~ "=" ~ Expression } 
+
+VariableDecl = {
+    "let" ~ VariableRef ~ Type ~ "=" ~ Expression
 }
 
 ForInStmt = {
-  "for" ~ VariableRef ~ "in" ~ Expression ~ Block
+    "for" ~ VariableRef ~ "in" ~ Expression ~ Block
 }
 
 LValue = {
-  Expression
+    DerefExpr
 }
 
 Expression = {
-  IfExpr |
-  OrExpr
+    IfExpr
+  | OrExpr
 }
 
 OrExpr = {
-  AndExpr
-  ~ ("or" ~ AndExpr)*
+    AndExpr ~ ("or" ~ AndExpr)*
 }
 
 AndExpr = {
-  ComparisonExpr
-  ~ ("and" ~ ComparisonExpr)*
+    ComparisonExpr ~ ("and" ~ ComparisonExpr)*
 }
 
 ComparisonExpr = {
-  TermExpr
-  ~ (ComparisonOperator ~ TermExpr)*
+    TermExpr ~ (ComparisonOperator ~ TermExpr)*
 }
 
 ComparisonOperator = _{
-  EqEq | NotEq | LessThan | GreaterThan | LessThanEq | GreaterThanEq
+    EqEq
+  | NotEq
+  | LessThan
+  | GreaterThan
+  | LessThanEq
+  | GreaterThanEq
 }
 
 TermExpr = {
-  FactorExpr
-  ~ (TermOperator ~ FactorExpr)*
+    FactorExpr ~ (TermOperator ~ FactorExpr)*
 }
 
 TermOperator = _{
-  Plus | Minus
+    Plus
+  | Minus
 }
 
 FactorExpr = {
-  RangeExpr
-  ~ (FactorOperator ~ RangeExpr)*
+    RangeExpr ~ (FactorOperator ~ RangeExpr)*
 }
 
 FactorOperator = _{
-  Asterisk | Slash | Percent
+    Asterisk
+  | Slash
+  | Percent
 }
 
 RangeExpr = {
-  CallExpr
-  ~ (RangeOperator ~ CallExpr)*
+    DerefExpr ~ (RangeOperator ~ DerefExpr)*
 }
 
 RangeOperator = _{
-  DotDotLt
+    DotDotLt
+}
+
+DerefExpr = {
+    Asterisk* ~ CallExpr
 }
 
 CallExpr = {
-  LeafExpr
-  ~ ArgumentList*
+    LeafExpr ~ ArgumentList*
 }
 
 ArgumentList = {
-  ("(" ~ ")") |
-  ("(" ~ Expression ~ ("," ~ Expression)* ~ ","? ~ ")")
+    ("(" ~ ")")
+  | ("(" ~ Expression ~ ("," ~ Expression)* ~ ","? ~ ")")
 }
 
 LeafExpr = {
-  NewExpr |
-  VariableRef |
-  LiteralExpr |
-  GroupedExpr
+    NewExpr
+  | VariableRef
+  | LiteralExpr
+  | GroupedExpr
 }
 
 NewExpr = {
-  "new" ~ "(" ~ Type ~ ")"
+    "new" ~ "(" ~ Type ~ ")"
 }
 
 LiteralExpr = {
-  StringLiteral |
-  IntegerLiteral |
-  FloatLiteral |
-  BooleanLiteral |
-  UnitLiteral
+    StringLiteral
+  | IntegerLiteral
+  | FloatLiteral
+  | BooleanLiteral
+  | UnitLiteral
 }
 
 VariableRef = {
-  identifier
+    identifier
 }
 
 StringLiteral = @{
-  "\"" ~ (!"\"" ~ ANY)* ~ "\""
+    "\"" ~ (!"\"" ~ ANY)* ~ "\""
 }
 
 IntegerLiteral = @{
-  Minus? ~ ASCII_DIGIT+
+    Minus? ~ ASCII_DIGIT+
 }
 
 FloatLiteral = @{
-  ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT*
+    ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT*
 }
 
 BooleanLiteral = {
-  True | False
+    True
+  | False
 }
 
 UnitLiteral = {
-  "(" ~ ")"
+    "(" ~ ")"
 }
 
 GroupedExpr = { "(" ~ Expression ~ ")" }
 
 ParamList = {
-  ("(" ~ ")") |
-  ("(" ~ ParamDecl ~ ("," ~ ParamDecl)* ~ ","? ~ ")")
+    ("(" ~ ")")
+  | ("(" ~ ParamDecl ~ ("," ~ ParamDecl)* ~ ","? ~ ")")
 }
 
 ParamDecl = {
-  identifier ~ Type
+    identifier ~ Type
 }
 
 Type = {
-  TypePrimitive
+    TypePrimitive
+  | TypePointer
 }
 
 TypePrimitive = {
-  TypeI32 | TypeI32 | TypeF64 | TypeRange
+    TypeI32
+  | TypeI64
+  | TypeF64
+  | TypeRange
+  | TypeString
 }
 
-TypeI32 = { "i32" }
-TypeI64 = { "i64" }
-TypeF64 = { "f64" }
-TypeRange = { "range" }
+TypeI32     = { "i32" }
+TypeI64     = { "i64" }
+TypeF64     = { "f64" }
+TypeRange   = { "range" }
+TypeString  = { "string" }
+TypePointer = { "&" ~ Type }
 
-EqEq = { "==" }
-NotEq = { "!=" }
-LessThan = { "<" }
-GreaterThan = { ">" }
-LessThanEq = { "<=" }
+EqEq          = { "==" }
+NotEq         = { "!=" }
+LessThan      = { "<" }
+GreaterThan   = { ">" }
+LessThanEq    = { "<=" }
 GreaterThanEq = { ">=" }
-Asterisk = { "*" }
-DotDotLt = { "..<" }
-Slash = { "/" }
-Percent = { "%" }
-Plus = { "+" }
-Minus = { "-" }
-True = { "true" }
-False = { "false" }
+Asterisk      = { "*" }
+DotDotLt      = { "..<" }
+Slash         = { "/" }
+Percent       = { "%" }
+Plus          = { "+" }
+Minus         = { "-" }
+True          = { "true" }
+False         = { "false" }
 
-keyword = {
-  "fn" |
-  "let" |
-  "new" |
-  "for" | "in" |
-  "if" | "else" |
-  "or" | "and" |
-  "break" | "continue" | "return" |
-  True | False
+keyword    =  {
+    "fn"
+  | "let"
+  | "new"
+  | "for"
+  | "in"
+  | "if"
+  | "else"
+  | "or"
+  | "and"
+  | "break"
+  | "continue"
+  | "return"
+  | True
+  | False
 }
 identifier = @{ !keyword ~ (XID_START | "_") ~ (XID_CONTINUE | "_")* }
 WHITESPACE = _{ " " | NEWLINE }
-COMMENT = _{ "#" ~ ANY* }
+COMMENT    = _{ "#" ~ ANY* }

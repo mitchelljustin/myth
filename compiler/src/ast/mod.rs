@@ -28,6 +28,7 @@ pub struct ParamDecl {
 
 #[derive(Debug, Clone)]
 pub enum Statement {
+    VariableDecl(Ast<VariableDecl>),
     Assignment(Ast<Assignment>),
     BreakStmt(Ast<BreakStmt>),
     ContinueStmt(Ast<ContinueStmt>),
@@ -36,17 +37,29 @@ pub enum Statement {
 }
 
 #[derive(Debug, Clone)]
-pub struct IfExpr {
+pub struct If {
     pub(crate) condition: Ast<Expression>,
     pub(crate) then_body: Ast<Block>,
     pub(crate) else_body: Option<Ast<Block>>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Assignment {
-    pub(crate) target: Ast<Expression>,
+pub struct VariableDecl {
+    pub(crate) name: Ast<Ident>,
     pub(crate) ty: Ast<Type>,
+    pub(crate) init_value: Ast<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Assignment {
+    pub(crate) target: Ast<LValue>,
     pub(crate) value: Ast<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub enum LValue {
+    VariableRef(Ast<VariableRef>),
+    Deref(Ast<Expression>),
 }
 
 #[derive(Debug, Clone)]
@@ -60,17 +73,24 @@ pub struct ReturnStmt {
 
 #[derive(Debug, Clone)]
 pub enum Expression {
-    BinaryExpr(Ast<BinaryExpr>),
+    Binary(Ast<Binary>),
+    Unary(Ast<Unary>),
     Call(Ast<Call>),
     Literal(Ast<Literal>),
     New(Ast<New>),
     VariableRef(Ast<VariableRef>),
-    IfExpr(Ast<IfExpr>),
+    If(Ast<If>),
 }
 
 #[derive(Debug, Clone)]
 pub struct New {
     pub(crate) ty: Ast<Type>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Unary {
+    pub(crate) operator: Operator,
+    pub(crate) target: Ast<Expression>,
 }
 
 #[derive(Debug, Clone)]
@@ -85,6 +105,7 @@ pub enum Literal {
 pub enum Type {
     None,
     Primitive(TypePrimitive),
+    Pointer(Ast<Type>),
 }
 
 #[derive(Debug, Clone)]
@@ -92,6 +113,8 @@ pub enum TypePrimitive {
     I32,
     I64,
     F64,
+    Range,
+    String,
 }
 
 #[derive(Debug, Clone)]
@@ -101,13 +124,13 @@ pub struct Call {
 }
 
 #[derive(Debug, Clone)]
-pub struct BinaryExpr {
+pub struct Binary {
     pub(crate) lhs: Ast<Expression>,
     pub(crate) rhs: Ast<Expression>,
     pub(crate) operator: Operator,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Operator {
     EqEq,
     NotEq,
@@ -121,6 +144,7 @@ pub enum Operator {
     Add,
     Sub,
     RangeExclusive,
+    Deref,
 }
 
 impl fmt::Display for Operator {
@@ -132,7 +156,7 @@ impl fmt::Display for Operator {
             Operator::Gt => ">",
             Operator::Lte => "<=",
             Operator::Gte => ">=",
-            Operator::Mul => "*",
+            Operator::Mul | Operator::Deref => "*",
             Operator::Div => "/",
             Operator::Rem => "%",
             Operator::Add => "+",
