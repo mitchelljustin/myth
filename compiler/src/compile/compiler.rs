@@ -9,11 +9,7 @@ use crate::compile::Error::{
     IfElseIncompatibleTypes, IllegalDeref, NoOperatorForType, NoSuchFunction, NoSuchVariable,
 };
 use crate::{ast, compile};
-use wasm_encoder::{
-    BlockType, CodeSection, DataCountSection, DataSection, Encode, ExportKind, ExportSection,
-    Function, FunctionSection, ImportSection, Instruction, MemorySection, MemoryType, Module,
-    TypeSection, ValType,
-};
+use wasm_encoder::{BlockType, CodeSection, ComponentImportSection, DataCountSection, DataSection, Encode, EntityType, ExportKind, ExportSection, Function, FunctionSection, ImportSection, Instruction, MemorySection, MemoryType, Module, PrimitiveValType, TypeSection, ValType};
 
 #[derive(Default)]
 pub struct Compiler {
@@ -28,7 +24,7 @@ pub struct Compiler {
     export_section: ExportSection,
     code_section: CodeSection,
     strings: HashMap<String, u32>,
-    data_index: u32,
+    func_idx: u32,
 }
 
 impl Compiler {
@@ -42,6 +38,7 @@ impl Compiler {
 
     fn init(&mut self) {
         Ty::install(&mut self.type_section);
+        self.analyzer.init();
     }
 
     pub fn compile_library(&mut self, lib: Ast<ast::Library>) -> compile::Result {
@@ -51,8 +48,33 @@ impl Compiler {
                 ast::Item::FunctionDef(func_def) => {
                     self.compile_func_def(func_def)?;
                 }
+                ast::Item::Use(use_item) => {
+                    self.compile_use(use_item)?;
+                }
             }
         }
+        Ok(())
+    }
+    
+    fn new_func_idx(&mut self) -> u32 {
+        let func_idx = self.func_idx;
+        self.func_idx += 1;
+        func_idx
+    }
+    
+    fn compile_use(&mut self, use_item: Ast<ast::Use>) -> compile::Result {
+        let [module, field] = use_item.v.path.as_slice() else {
+            unimplemented!("use");
+        };
+        let module = match module.v.0.as_str() {
+            "wasi" => "wasi_snapshot_preview1",
+            verbatim => verbatim,
+        };
+        let func_name = field.v.0.as_str();
+        let func_idx = self.new_func_idx();
+        self.func_name_to_index.insert(func_name.to_string(), func_idx);
+        // TODO: which type? 
+        self.import_section.import(module, func_name, EntityType::Function(func_idx));
         Ok(())
     }
 
@@ -80,7 +102,7 @@ impl Compiler {
         }
         // Set metadata
         let func_type_idx = self.type_section.len();
-        let func_idx = self.function_section.len();
+        let func_idx = self.new_func_idx();
         let func_name = func_def.v.name.v.0;
         let param_types: Vec<ValType> = func_def
             .v
@@ -92,7 +114,7 @@ impl Compiler {
             .analyzer
             .ast_type_to_ty(&func_def.v.return_type)
             .val_type();
-        self.type_section.function(param_types, results);
+        self.type_section.ty().function(param_types, results);
         self.function_section.function(func_type_idx);
         self.export_section
             .export(func_name.as_str(), ExportKind::Func, func_idx);

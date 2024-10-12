@@ -88,6 +88,15 @@ pub fn transform_item(pair: Pair) -> TransformResult<ast::Item> {
                 )?),
             )
         }
+        Rule::UseItem => {
+            let path = pair.clone().into_inner().next().unwrap();
+            debug_assert_eq!(path.as_rule(), Rule::Path);
+            let path = path
+                .into_inner()
+                .map(transform_ident)
+                .collect::<Result<Vec<_>, _>>()?;
+            create(&pair, ast::Item::Use(create(&pair, ast::Use { path })?))
+        }
         _ => unreachable!("{rule:?}"),
     }
 }

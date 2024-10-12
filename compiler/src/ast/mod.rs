@@ -10,6 +10,7 @@ pub struct Library {
 #[derive(Debug, Clone)]
 pub enum Item {
     FunctionDef(Ast<FunctionDef>),
+    Use(Ast<Use>),
 }
 
 #[derive(Debug, Clone)]
@@ -18,6 +19,11 @@ pub struct FunctionDef {
     pub(crate) params: Vec<Ast<ParamDecl>>,
     pub(crate) return_type: Ast<Type>,
     pub(crate) body: Ast<Block>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Use {
+    pub(crate) path: Vec<Ast<Ident>>,
 }
 
 #[derive(Debug, Clone)]

@@ -54,20 +54,20 @@ impl Ty {
     }
 
     pub fn install(types: &mut TypeSection) {
-        types.struct_([]);
-        types.struct_([FieldType {
+        types.ty().struct_([]);
+        types.ty().struct_([FieldType {
             element_type: StorageType::Val(ValType::I32),
             mutable: true,
         }]);
-        types.struct_([FieldType {
+        types.ty().struct_([FieldType {
             element_type: StorageType::Val(ValType::I64),
             mutable: true,
         }]);
-        types.struct_([FieldType {
+        types.ty().struct_([FieldType {
             element_type: StorageType::Val(ValType::F64),
             mutable: true,
         }]);
-        types.struct_([
+        types.ty().struct_([
             FieldType {
                 element_type: StorageType::Val(ValType::I32),
                 mutable: true,
@@ -77,8 +77,8 @@ impl Ty {
                 mutable: true,
             },
         ]);
-        types.array(&StorageType::I8, true);
-        types.struct_([FieldType {
+        types.ty().array(&StorageType::I8, true);
+        types.ty().struct_([FieldType {
             element_type: StorageType::Val(ValType::Ref(RefType {
                 heap_type: HeapType::Abstract {
                     ty: AbstractHeapType::Any,

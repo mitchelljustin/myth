@@ -1,5 +1,7 @@
+use console::log;
+
 fn _start() i32 {
   let swag &str = "swag";
-  *swag = "yolos";
+  swag = "yolos";
   0
 }

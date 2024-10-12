@@ -1,6 +1,9 @@
 Library = { SOI ~ Item* ~ EOI }
 
-Item = { FunctionDef }
+Item = {
+    FunctionDef
+  | UseItem
+}
 
 FunctionDef = {
     "fn" ~ identifier ~ ParamList ~ Type? ~ Block
@@ -17,7 +20,7 @@ StatementList = {
 LastSemi = { ";" }
 
 Statement = {
-    VariableDecl
+   VariableDecl
   | Assignment
   | ForInStmt
   | BreakStmt
@@ -45,6 +48,7 @@ ForInStmt = {
 }
 
 LValue = {
+    VariableRef |
     DerefExpr
 }
 
@@ -107,6 +111,14 @@ DerefExpr = {
 
 CallExpr = {
     LeafExpr ~ ArgumentList*
+}
+
+UseItem = {
+  "use" ~ Path ~ ";"
+}
+
+Path = {
+  identifier ~ ("::" ~ identifier)*
 }
 
 ArgumentList = {
@@ -221,6 +233,7 @@ keyword    =  {
   | "and"
   | "break"
   | "continue"
+  | "use"
   | "return"
   | True
   | False

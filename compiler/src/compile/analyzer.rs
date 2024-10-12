@@ -17,8 +17,8 @@ pub struct Analyzer {
 pub type TyResult = Result<Ty, compile::Error>;
 
 impl Analyzer {
-    pub fn new() -> Self {
-        Default::default()
+    pub(crate) fn init(&mut self) {
+        todo!()
     }
 
     pub fn analyze_library(&mut self, lib: &Ast<ast::Library>) {
@@ -26,6 +26,9 @@ impl Analyzer {
             match item.v.as_ref() {
                 ast::Item::FunctionDef(func_def) => {
                     self.analyze_func_def(func_def);
+                }
+                ast::Item::Use(_use_item) => {
+                    
                 }
             }
         }
