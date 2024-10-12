@@ -186,7 +186,8 @@ TypeI32     = { "i32" }
 TypeI64     = { "i64" }
 TypeF64     = { "f64" }
 TypeRange   = { "range" }
-TypeString  = { "string" }
+TypeString  = { "str" }
+
 TypePointer = { "&" ~ Type }
 
 EqEq          = { "==" }

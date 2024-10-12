@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let module_name = args.input_file.to_string_lossy().replace(".myth", "");
     let source = fs::read_to_string(args.input_file)?;
-    let lib = match parse::parse(source) {
+    let lib = match parse::parse(&source) {
         Err(parse::Error::PestParseFailed(err)) => {
             eprintln!("parse error: \n{err}");
             return Err(err.into());

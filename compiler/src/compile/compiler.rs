@@ -7,7 +7,7 @@ use wasm_encoder::{
 
 use crate::ast::{Ast, Expression, LValue, Literal, Operator, Statement};
 use crate::compile::analyzer::Analyzer;
-use crate::compile::ty::Ty;
+use crate::compile::ty::{GcType, Ty};
 use crate::compile::util;
 use crate::compile::CallFrame;
 use crate::compile::Error::{
@@ -191,13 +191,19 @@ impl Compiler {
                     let Ty::Pointer(inner) = ty else {
                         return Err(IllegalDeref { ty });
                     };
-                    let struct_type_index = inner.struct_type_idx();
                     self.compile_expression(target)?;
                     self.compile_expression(assn.v.value)?;
-                    self.emit(&Instruction::StructSet {
-                        struct_type_index,
-                        field_index: 0,
-                    });
+                    match inner.gc_type() {
+                        GcType::Struct(struct_type_index) => {
+                            self.emit(&Instruction::StructSet {
+                                struct_type_index,
+                                field_index: 0,
+                            });
+                        }
+                        GcType::Array(array_type_index) => {
+                            self.emit(&Instruction::ArraySet(array_type_index));
+                        }
+                    }
                 }
             },
         }
@@ -299,22 +305,35 @@ impl Compiler {
             }
             Expression::New(new) => {
                 let ty = self.analyzer.ast_type_to_ty(&new.v.ty);
-                let type_idx = ty.struct_type_idx();
-                self.emit(&Instruction::StructNewDefault(type_idx));
+                match ty.gc_type() {
+                    GcType::Struct(struct_type_index) => {
+                        self.emit(&Instruction::StructNewDefault(struct_type_index));
+                    }
+                    GcType::Array(array_type_index) => {
+                        self.emit(&Instruction::I32Const(0));
+                        self.emit(&Instruction::ArrayNewDefault(array_type_index));
+                    }
+                }
             }
             Expression::Unary(unary) => {
                 debug_assert!(unary.v.operator == Operator::Deref);
-                let expr = unary.v.target;
-                let ty = self.analyzer.resolve_expr_type(&self.call_frame, &expr)?;
-                self.compile_expression(expr)?;
+                let target = unary.v.target;
+                let ty = self.analyzer.resolve_expr_type(&self.call_frame, &target)?;
                 let Ty::Pointer(inner) = ty else {
                     return Err(IllegalDeref { ty });
                 };
-                let struct_type_index = inner.struct_type_idx();
-                self.emit(&Instruction::StructGet {
-                    struct_type_index,
-                    field_index: 0,
-                });
+                self.compile_expression(target)?;
+                match inner.gc_type() {
+                    GcType::Struct(struct_type_index) => {
+                        self.emit(&Instruction::StructGet {
+                            struct_type_index,
+                            field_index: 0,
+                        });
+                    }
+                    GcType::Array(array_type_index) => {
+                        self.emit(&Instruction::ArrayGet(array_type_index));
+                    }
+                }
             }
         }
         Ok(())

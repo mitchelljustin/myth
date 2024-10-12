@@ -16,6 +16,20 @@ pub enum Ty {
     Pointer(Box<Ty>),
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Copy)]
+pub enum GcType {
+    Struct(u32),
+    Array(u32),
+}
+
+impl GcType {
+    pub fn idx(&self) -> u32 {
+        match self {
+            GcType::Array(idx) | GcType::Struct(idx) => *idx,
+        }
+    }
+}
+
 impl Ty {
     pub fn val_type(&self) -> Option<ValType> {
         match self {
@@ -25,16 +39,16 @@ impl Ty {
             Ty::F64 => Some(ValType::F64),
             Ty::Bool => Some(ValType::I32),
             Ty::Pointer(inner) => Some(ValType::Ref(RefType {
-                nullable: true,
-                heap_type: HeapType::Concrete(inner.struct_type_idx()),
+                nullable: false,
+                heap_type: HeapType::Concrete(inner.gc_type().idx()),
             })),
             Ty::Range => Some(ValType::Ref(RefType {
                 nullable: false,
-                heap_type: HeapType::Concrete(Ty::Range.struct_type_idx()),
+                heap_type: HeapType::Concrete(Ty::Range.gc_type().idx()),
             })),
             Ty::String => Some(ValType::Ref(RefType {
                 nullable: false,
-                heap_type: HeapType::Concrete(Ty::String.struct_type_idx()),
+                heap_type: HeapType::Concrete(Ty::String.gc_type().idx()),
             })),
         }
     }
@@ -76,16 +90,16 @@ impl Ty {
         }]);
     }
 
-    pub fn struct_type_idx(&self) -> u32 {
+    pub fn gc_type(&self) -> GcType {
         match self {
-            Ty::Unit => 0,
-            Ty::I32 => 1,
-            Ty::I64 => 2,
-            Ty::F64 => 3,
-            Ty::Bool => Ty::I32.struct_type_idx(),
-            Ty::Range => 4,
-            Ty::String => 5,
-            Ty::Pointer(_) => 6,
+            Ty::Unit => GcType::Struct(0),
+            Ty::I32 => GcType::Struct(1),
+            Ty::I64 => GcType::Struct(2),
+            Ty::F64 => GcType::Struct(3),
+            Ty::Bool => Ty::I32.gc_type(),
+            Ty::Range => GcType::Struct(4),
+            Ty::String => GcType::Array(5),
+            Ty::Pointer(_) => GcType::Struct(6),
         }
     }
 }

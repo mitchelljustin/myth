@@ -191,20 +191,20 @@ pub fn transform_statement(pair: Pair) -> TransformResult<ast::Statement> {
     }
 }
 
-pub fn transform_operator(pair: &Pair) -> ast::Operator {
+pub fn transform_operator(pair: &Pair) -> Operator {
     match pair.as_rule() {
-        Rule::EqEq => ast::Operator::EqEq,
-        Rule::NotEq => ast::Operator::NotEq,
-        Rule::LessThan => ast::Operator::Lt,
-        Rule::GreaterThan => ast::Operator::Gt,
-        Rule::LessThanEq => ast::Operator::Lte,
-        Rule::GreaterThanEq => ast::Operator::Gte,
-        Rule::Asterisk => ast::Operator::Mul,
-        Rule::Slash => ast::Operator::Div,
-        Rule::Percent => ast::Operator::Rem,
-        Rule::Plus => ast::Operator::Add,
-        Rule::Minus => ast::Operator::Sub,
-        Rule::DotDotLt => ast::Operator::RangeExclusive,
+        Rule::EqEq => Operator::EqEq,
+        Rule::NotEq => Operator::NotEq,
+        Rule::LessThan => Operator::Lt,
+        Rule::GreaterThan => Operator::Gt,
+        Rule::LessThanEq => Operator::Lte,
+        Rule::GreaterThanEq => Operator::Gte,
+        Rule::Asterisk => Operator::Mul,
+        Rule::Slash => Operator::Div,
+        Rule::Percent => Operator::Rem,
+        Rule::Plus => Operator::Add,
+        Rule::Minus => Operator::Sub,
+        Rule::DotDotLt => Operator::RangeExclusive,
         rule => unreachable!("transform_operator {rule:?}"),
     }
 }
@@ -294,7 +294,7 @@ pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
                         &pair,
                         ast::Unary {
                             target: expr,
-                            operator: ast::Operator::Deref,
+                            operator: Operator::Deref,
                         },
                     )?),
                 )?;
