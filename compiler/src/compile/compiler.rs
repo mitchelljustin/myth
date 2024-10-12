@@ -1,10 +1,5 @@
 use std::collections::HashMap;
 
-use wasm_encoder::{
-    BlockType, CodeSection, ConstExpr, DataSection, Encode, ExportKind, ExportSection, Function,
-    FunctionSection, ImportSection, Instruction, Module, TypeSection, ValType,
-};
-
 use crate::ast::{Ast, Expression, LValue, Literal, Operator, Statement};
 use crate::compile::analyzer::Analyzer;
 use crate::compile::ty::{GcType, Ty};
@@ -14,6 +9,11 @@ use crate::compile::Error::{
     IfElseIncompatibleTypes, IllegalDeref, NoOperatorForType, NoSuchFunction, NoSuchVariable,
 };
 use crate::{ast, compile};
+use wasm_encoder::{
+    BlockType, CodeSection, DataCountSection, DataSection, Encode, ExportKind, ExportSection,
+    Function, FunctionSection, ImportSection, Instruction, MemorySection, MemoryType, Module,
+    TypeSection, ValType,
+};
 
 #[derive(Default)]
 pub struct Compiler {
@@ -29,7 +29,6 @@ pub struct Compiler {
     code_section: CodeSection,
     strings: HashMap<String, u32>,
     data_index: u32,
-    data_offset: u32,
 }
 
 impl Compiler {
@@ -121,10 +120,23 @@ impl Compiler {
     pub fn finish(self) -> Module {
         let mut module = Module::new();
 
+        let mut memory = MemorySection::new();
+        memory.memory(MemoryType {
+            page_size_log2: None,
+            maximum: None,
+            minimum: 1,
+            shared: false,
+            memory64: false,
+        });
+
         module.section(&self.type_section);
         module.section(&self.import_section);
         module.section(&self.function_section);
+        module.section(&memory);
         module.section(&self.export_section);
+        module.section(&DataCountSection {
+            count: self.data_section.len(),
+        });
         module.section(&self.code_section);
         module.section(&self.data_section);
 
@@ -243,13 +255,14 @@ impl Compiler {
                 }
                 Literal::String(value) => {
                     let len = value.len();
-                    self.data_section.active(
-                        self.data_index,
-                        &ConstExpr::i32_const(self.data_offset as i32),
-                        value.bytes(),
-                    );
-                    self.data_index += 1;
-                    self.data_offset += len as u32;
+                    let data_seg_idx = self.data_section.len();
+                    self.data_section.passive(value.bytes());
+                    self.emit(&Instruction::I32Const(0));
+                    self.emit(&Instruction::I32Const(len as i32));
+                    self.emit(&Instruction::ArrayNewData {
+                        array_data_index: data_seg_idx,
+                        array_type_index: Ty::String.gc_type().idx(),
+                    });
                 }
                 Literal::Float(val) => {
                     self.emit(&Instruction::F64Const(val));

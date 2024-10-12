@@ -1,13 +1,5 @@
-
-fn add_one(x &i32) {
-  *x = *x + 1;
-}
-
-
 fn _start() i32 {
-  let i &i32 = new(i32);
-  let swag &str = new(str);
-  add_one(i);
-  add_one(i);
-  *i
+  let swag &str = "swag";
+  *swag = "yolos";
+  0
 }

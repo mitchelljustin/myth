@@ -77,7 +77,7 @@ impl Ty {
                 mutable: true,
             },
         ]);
-        types.array(&StorageType::I8, false);
+        types.array(&StorageType::I8, true);
         types.struct_([FieldType {
             element_type: StorageType::Val(ValType::Ref(RefType {
                 heap_type: HeapType::Abstract {

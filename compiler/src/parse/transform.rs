@@ -149,29 +149,33 @@ pub fn transform_statement(pair: Pair) -> TransformResult<ast::Statement> {
             let [lvalue, value] = pair.clone().into_inner().next_chunk().unwrap();
             debug_assert_eq!(lvalue.as_rule(), Rule::LValue);
             let lvalue = lvalue.into_inner().next().unwrap();
-            let target = create(&lvalue, match lvalue.as_rule() {
-                Rule::VariableRef => {
-                    ast::LValue::VariableRef(create(&lvalue, ast::VariableRef {
-                        name: transform_ident(lvalue.clone())?,
-                    })?)
-                }
-                Rule::DerefExpr => {
-                    let lvalue_expr = transform_expression(lvalue.clone())?;
-                    let ast::Expression::Unary(unary) = *lvalue_expr.v else {
-                        return Err(InvalidLvalue(lvalue.as_str().to_string()));
-                    };
-                    if unary.v.operator != Operator::Deref {
-                        return Err(InvalidLvalue(lvalue.as_str().to_string()));
-                    };
-                    ast::LValue::Deref(unary.v.target)
-                }
-                rule => unreachable!("{rule:?}"),
-            })?;
+            let target = create(
+                &lvalue,
+                match lvalue.as_rule() {
+                    Rule::VariableRef => ast::LValue::VariableRef(create(
+                        &lvalue,
+                        ast::VariableRef {
+                            name: transform_ident(lvalue.clone())?,
+                        },
+                    )?),
+                    Rule::DerefExpr => {
+                        let lvalue_expr = transform_expression(lvalue.clone())?;
+                        let ast::Expression::Unary(unary) = *lvalue_expr.v else {
+                            return Err(InvalidLvalue(lvalue.as_str().to_string()));
+                        };
+                        if unary.v.operator != Operator::Deref {
+                            return Err(InvalidLvalue(lvalue.as_str().to_string()));
+                        };
+                        ast::LValue::Deref(unary.v.target)
+                    }
+                    rule => unreachable!("{rule:?}"),
+                },
+            )?;
             let value = transform_expression(value)?;
-            create(&pair, ast::Statement::Assignment(create(&pair, ast::Assignment {
-                target,
-                value,
-            })?))
+            create(
+                &pair,
+                ast::Statement::Assignment(create(&pair, ast::Assignment { target, value })?),
+            )
         }
         Rule::BreakStmt => {
             unimplemented!()
@@ -226,7 +230,9 @@ pub fn transform_expression(pair: Pair) -> TransformResult<ast::Expression> {
             let literal = pair.clone().into_inner().next().unwrap();
             let inner =
                 match literal.as_rule() {
-                    Rule::StringLiteral => ast::Literal::String(literal.as_str().to_string()),
+                    Rule::StringLiteral => ast::Literal::String(
+                        literal.into_inner().next().unwrap().as_str().to_string(),
+                    ),
                     Rule::IntegerLiteral => {
                         let value = literal.as_str().parse().map_err(|err| {
                             InvalidIntegerLiteral(literal.as_str().to_string(), err)
