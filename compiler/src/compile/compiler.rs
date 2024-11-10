@@ -9,7 +9,11 @@ use crate::compile::Error::{
     IfElseIncompatibleTypes, IllegalDeref, NoOperatorForType, NoSuchFunction, NoSuchVariable,
 };
 use crate::{ast, compile};
-use wasm_encoder::{BlockType, CodeSection, ComponentImportSection, DataCountSection, DataSection, Encode, EntityType, ExportKind, ExportSection, Function, FunctionSection, ImportSection, Instruction, MemorySection, MemoryType, Module, PrimitiveValType, TypeSection, ValType};
+use wasm_encoder::{
+    BlockType, CodeSection, DataCountSection, DataSection, Encode,
+    EntityType, ExportKind, ExportSection, Function, FunctionSection, ImportSection, Instruction,
+    MemorySection, MemoryType, Module, TypeSection, ValType,
+};
 
 #[derive(Default)]
 pub struct Compiler {
@@ -55,13 +59,13 @@ impl Compiler {
         }
         Ok(())
     }
-    
+
     fn new_func_idx(&mut self) -> u32 {
         let func_idx = self.func_idx;
         self.func_idx += 1;
         func_idx
     }
-    
+
     fn compile_use(&mut self, use_item: Ast<ast::Use>) -> compile::Result {
         let [module, field] = use_item.v.path.as_slice() else {
             unimplemented!("use");
@@ -72,9 +76,11 @@ impl Compiler {
         };
         let func_name = field.v.0.as_str();
         let func_idx = self.new_func_idx();
-        self.func_name_to_index.insert(func_name.to_string(), func_idx);
-        // TODO: which type? 
-        self.import_section.import(module, func_name, EntityType::Function(func_idx));
+        self.func_name_to_index
+            .insert(func_name.to_string(), func_idx);
+        // TODO: which type?
+        self.import_section
+            .import(module, func_name, EntityType::Function(func_idx));
         Ok(())
     }
 
